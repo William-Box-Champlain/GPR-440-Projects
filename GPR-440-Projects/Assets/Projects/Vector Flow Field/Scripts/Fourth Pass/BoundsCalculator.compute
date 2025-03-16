@@ -1,0 +1,70 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel GenerateTexture
+
+//Input data
+StructuredBuffer<float3> Verticies;
+StructuredBuffer<int> Triangles;
+
+//Output data
+RWTexture2D<float4> Output;
+
+//Params
+int VertexCount;
+int TriangleCount;
+int2 TextureSize;
+float2 boundsMin;
+float2 boundsMax;
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+
+float2 UVToWorldPos(uint2 id)
+{
+    float2 uv = float2(id.x / (float) (TextureSize.x - 1), id.y / (float) (TextureSize.y - 1));
+    return float2(lerp(boundsMin.x, boundsMax.x, uv.x), lerp(boundsMin.y, boundsMax.y, uv.y));
+}
+
+//Calculates the barycentric coordinate of point p relative to the triangle a-b-c
+bool PointInTriangle(float2 p, float2 a, float2 b, float2 c)
+{
+    float2 v0 = c - a;
+    float2 v1 = b - a;
+    float2 v2 = p - a;
+    
+    float dot00 = dot(v0, v0);
+    float dot01 = dot(v0, v1);
+    float dot02 = dot(v0, v2);
+    float dot11 = dot(v1, v1);
+    float dot12 = dot(v1, v2);
+    
+    float invDenom = 1.0 / (dot00 * dot11 - dot01 * dot01);
+    float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+    float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+    
+    return (u >= 0) && (v >= 0) && (u + v <= 1);
+}
+
+//Uses the barycentric coordinate of the texel to test if it is within the area of any triangles in the mesh
+[numthreads(8,8,1)]
+void GenerateTexture(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint) TextureSize.x || id.y >= (uint) TextureSize.y)
+        return;
+    
+    float2 position = UVToWorldPos(id.xy);
+        
+    bool inMesh = false;
+    
+    for (int i = 0; i < TriangleCount; i++)
+    {
+        int index = i * 3;
+        
+        float2 a = float2(Verticies[Triangles[index + 0]].x, Verticies[Triangles[index + 0]].z);
+        float2 b = float2(Verticies[Triangles[index + 1]].x, Verticies[Triangles[index + 1]].z);
+        float2 c = float2(Verticies[Triangles[index + 2]].x, Verticies[Triangles[index + 2]].z);
+        
+        if ((inMesh = PointInTriangle(position, a, b, c)) ? true : false)
+            break;
+    }
+    Output[id.xy] = inMesh ? float4(0, 0, 1, 0) : float4(0, 0, 0, 1);
+}

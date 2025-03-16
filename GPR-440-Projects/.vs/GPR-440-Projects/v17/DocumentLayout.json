@@ -1,0 +1,109 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\fourth pass\\vectorflowfieldmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fourth pass\\vectorflowfieldmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\fourth pass\\vectorflowfield.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fourth pass\\vectorflowfield.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\assets\\projects\\vector flow field\\scripts\\fourth pass\\vffcalculator.compute||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fourth pass\\vffcalculator.compute||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\assets\\projects\\vector flow field\\scripts\\fourth pass\\boundscalculator.compute||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fourth pass\\boundscalculator.compute||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\assets\\projects\\vector flow field\\scripts\\fourth pass\\vectorflowfieldagent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fourth pass\\vectorflowfieldagent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 5,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "VectorFlowField.cs",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowField.cs",
+              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowField.cs",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowField.cs",
+              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowField.cs",
+              "ViewState": "AgIAAMAAAAAAAAAAAAAMwNMAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-03-16T13:59:59.663Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "VFFCalculator.compute",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VFFCalculator.compute",
+              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VFFCalculator.compute",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VFFCalculator.compute",
+              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VFFCalculator.compute",
+              "ViewState": "AgIAAPMAAAAAAAAAAAAEwAMBAAA6AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
+              "WhenOpened": "2025-03-16T09:00:59.804Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "BoundsCalculator.compute",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\BoundsCalculator.compute",
+              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\BoundsCalculator.compute",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\BoundsCalculator.compute",
+              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\BoundsCalculator.compute",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAUAAAAcAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
+              "WhenOpened": "2025-03-16T05:02:13.581Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "VectorFlowFieldAgent.cs",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldAgent.cs",
+              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldAgent.cs",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldAgent.cs",
+              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldAgent.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAAqAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-03-16T00:34:01.231Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "VectorFlowFieldManager.cs",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldManager.cs",
+              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldManager.cs",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldManager.cs",
+              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldManager.cs",
+              "ViewState": "AgIAADUAAAAAAAAAAAAIwFMAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-03-16T00:32:09.782Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

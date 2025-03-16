@@ -1,0 +1,561 @@
+#pragma kernel Advection
+#pragma kernel Divergence
+#pragma kernel PressureSolve
+#pragma kernel PressureSolveMulti
+#pragma kernel PressureGradient
+#pragma kernel ApplyBoundaries
+#pragma kernel ApplySourcesAndSinks
+#pragma kernel VisualizeVectorField
+
+// Buffers
+RWStructuredBuffer<float3> VelocityBuffer;
+RWStructuredBuffer<float> PressureBuffer;
+RWStructuredBuffer<float> PressureBufferAlt;  // Second buffer for ping-pong technique
+RWStructuredBuffer<float> DivergenceBuffer;
+
+// Texture for boundaries, sources, and sinks
+Texture2D<float4> BoundaryTexture;
+SamplerState samplerBoundaryTexture;
+
+// Output texture for visualization
+RWTexture2D<float4> VisualizationTexture;
+
+// Parameters
+int2 GridDimensions;  // x: width, y: height
+float DeltaTime;
+float SourceStrength;
+float SinkStrength;
+int IterationCount;  // Number of pressure solving iterations
+
+// Helper functions
+int GetIndex(int x, int y)
+{
+    // Ensure coordinates are within grid bounds
+    x = clamp(x, 0, GridDimensions.x - 1);
+    y = clamp(y, 0, GridDimensions.y - 1);
+    return y * GridDimensions.x + x;
+}
+
+// Sample the boundary texture to determine cell type at given coordinates
+// Returns: float4 where
+//   - r > 0.5, g,b < 0.5: Sink
+//   - g > 0.5, r,b < 0.5: Source
+//   - r,g,b all near 1: Fluid area
+//   - anything else: Boundary
+float4 SampleBoundary(int2 coords)
+{
+    // Convert grid coordinates to normalized texture coordinates
+    float2 texCoords = (coords + 0.5f) / float2(GridDimensions.xy);
+    return BoundaryTexture.SampleLevel(samplerBoundaryTexture, texCoords, 0);
+}
+
+bool IsSource(int2 coords);
+bool IsSink(int2 coords);
+
+bool IsBoundary(int2 coords)
+{
+    float4 color = SampleBoundary(coords);
+    // If not predominantly white, it's a boundary
+    return (color.r < 0.9f || color.g < 0.9f || color.b < 0.9f) && !(IsSource(coords) || IsSink(coords));
+}
+
+bool IsSource(int2 coords)
+{
+    float4 color = SampleBoundary(coords);
+    // If predominantly green, it's a source
+    return (color.g > 0.5f && color.r < 0.5f && color.b < 0.5f);
+}
+
+bool IsSink(int2 coords)
+{
+    float4 color = SampleBoundary(coords);
+    // If predominantly red, it's a sink
+    return (color.r > 0.5f && color.g < 0.5f && color.b < 0.5f);
+}
+
+// Overloaded versions for index-based access
+bool IsBoundary(int index)
+{
+    int2 coords = int2(index % GridDimensions.x, index / GridDimensions.x);
+    return IsBoundary(coords);
+}
+
+bool IsSource(int index)
+{
+    int2 coords = int2(index % GridDimensions.x, index / GridDimensions.x);
+    return IsSource(coords);
+}
+
+bool IsSink(int index)
+{
+    int2 coords = int2(index % GridDimensions.x, index / GridDimensions.x);
+    return IsSink(coords);
+}
+
+// Sample velocity at a position using bilinear interpolation
+float3 SampleVelocity(float2 pos)
+{
+    // Get the four surrounding grid points
+    int x0 = clamp(int(pos.x), 0, GridDimensions.x - 1);
+    int y0 = clamp(int(pos.y), 0, GridDimensions.y - 1);
+    int x1 = clamp(x0 + 1, 0, GridDimensions.x - 1);
+    int y1 = clamp(y0 + 1, 0, GridDimensions.y - 1);
+    
+    // Calculate interpolation factors
+    float fx = pos.x - x0;
+    float fy = pos.y - y0;
+    
+    // Get velocities at the four corners
+    float3 v00 = VelocityBuffer[GetIndex(x0, y0)];
+    float3 v10 = VelocityBuffer[GetIndex(x1, y0)];
+    float3 v01 = VelocityBuffer[GetIndex(x0, y1)];
+    float3 v11 = VelocityBuffer[GetIndex(x1, y1)];
+    
+    // Bilinear interpolation
+    float3 result = lerp(
+        lerp(v00, v10, fx),
+        lerp(v01, v11, fx),
+        fy
+    );
+    
+    return result;
+}
+
+// Advection kernel - moves velocity along itself
+[numthreads(8, 8, 1)]
+void Advection(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)GridDimensions.x || id.y >= (uint)GridDimensions.y)
+        return;
+    
+    int index = GetIndex(id.x, id.y);
+    int2 coords = int2(id.x, id.y);
+    
+    // Skip boundaries, sources, and sinks - they'll be handled separately
+    if (IsBoundary(coords) || IsSource(coords) || IsSink(coords))
+        return;
+    
+    // Get current velocity
+    float3 velocity = VelocityBuffer[index];
+    
+    // Trace backward
+    float2 pos = float2(id.x, id.y) - DeltaTime * velocity.xy;
+    
+    // Sample velocity at the traced position
+    float3 newVelocity = SampleVelocity(pos);
+    
+    // Apply some dissipation (fluid loses energy over time)
+    newVelocity *= 0.95f;
+    
+    // Update velocity
+    VelocityBuffer[index] = newVelocity;
+}
+
+// Apply source and sink pressures with gentle velocity influence
+[numthreads(8, 8, 1)]
+void ApplySourcesAndSinks(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint) GridDimensions.x || id.y >= (uint) GridDimensions.y)
+        return;
+    
+    int index = GetIndex((int) id.x, (int) id.y);
+    int2 coords = int2((int) id.x, (int) id.y);
+    
+    // Apply high pressure at sources
+    if (IsSource(coords))
+    {
+        // Set a high positive pressure at source cells
+        PressureBuffer[index] = SourceStrength;
+        PressureBufferAlt[index] = SourceStrength;
+        
+        // Create gentle outward velocity in direct neighbors
+        for (int dy = -1; dy <= 1; dy++)
+        {
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                if (dx == 0 && dy == 0)
+                    continue; // Skip center cell
+                
+                int2 neighborCoords = int2((int) id.x + dx, (int) id.y + dy);
+                int neighborIndex = GetIndex(neighborCoords.x, neighborCoords.y);
+                
+                // Skip boundaries, sources, and sinks
+                if (IsBoundary(neighborCoords) || IsSource(neighborCoords) || IsSink(neighborCoords))
+                    continue;
+                
+                // Calculate direction from source to this neighbor
+                float2 dir = float2(dx, dy);
+                float len = length(dir);
+                if (len > 0.001f)
+                {
+                    // Normalize direction
+                    dir /= len;
+                    
+                    // Get current velocity
+                    float3 vel = VelocityBuffer[neighborIndex];
+                    
+                    // Blend with outward direction (very conservative)
+                    // Use just 5% influence for stability
+                    vel.xy = lerp(vel.xy, dir * 0.2, 0.05);
+                    
+                    // Apply a maximum magnitude limit
+                    float magSq = dot(vel.xy, vel.xy);
+                    if (magSq > 1.0)
+                    {
+                        vel.xy = normalize(vel.xy);
+                    }
+                    
+                    // Update neighbor velocity
+                    VelocityBuffer[neighborIndex] = vel;
+                }
+            }
+        }
+    }
+    
+    // Apply low pressure at sinks
+    if (IsSink(coords))
+    {
+        // Set a low or negative pressure at sink cells
+        PressureBuffer[index] = SinkStrength;
+        PressureBufferAlt[index] = SinkStrength;
+        
+        // Create gentle inward velocity in direct neighbors
+        for (int dy = -1; dy <= 1; dy++)
+        {
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                if (dx == 0 && dy == 0)
+                    continue; // Skip center cell
+                
+                int2 neighborCoords = int2((int) id.x + dx, (int) id.y + dy);
+                int neighborIndex = GetIndex(neighborCoords.x, neighborCoords.y);
+                
+                // Skip boundaries, sources, and sinks
+                if (IsBoundary(neighborCoords) || IsSource(neighborCoords) || IsSink(neighborCoords))
+                    continue;
+                
+                // Calculate direction from this neighbor to sink
+                float2 dir = float2(-dx, -dy);
+                float len = length(dir);
+                if (len > 0.001f)
+                {
+                    // Normalize direction
+                    dir /= len;
+                    
+                    // Get current velocity
+                    float3 vel = VelocityBuffer[neighborIndex];
+                    
+                    // Blend with inward direction (very conservative)
+                    // Use just 5% influence for stability
+                    vel.xy = lerp(vel.xy, dir * 0.2, 0.05);
+                    
+                    // Apply a maximum magnitude limit
+                    float magSq = dot(vel.xy, vel.xy);
+                    if (magSq > 1.0)
+                    {
+                        vel.xy = normalize(vel.xy);
+                    }
+                    
+                    // Update neighbor velocity
+                    VelocityBuffer[neighborIndex] = vel;
+                }
+            }
+        }
+        
+        // Set zero velocity at sink cells themselves
+        VelocityBuffer[index] = float3(0, 0, 0);
+    }
+}
+
+// Calculate velocity divergence
+[numthreads(8, 8, 1)]
+void Divergence(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)GridDimensions.x || id.y >= (uint)GridDimensions.y)
+        return;
+    
+    int index = GetIndex(id.x, id.y);
+    int2 coords = int2(id.x, id.y);
+    
+    // Skip boundaries
+    if (IsBoundary(coords))
+    {
+        DivergenceBuffer[index] = 0;
+        return;
+    }
+    
+    // Get neighboring cell velocities
+    float3 vL = VelocityBuffer[GetIndex(id.x - 1, id.y)];
+    float3 vR = VelocityBuffer[GetIndex(id.x + 1, id.y)];
+    float3 vB = VelocityBuffer[GetIndex(id.x, id.y - 1)];
+    float3 vT = VelocityBuffer[GetIndex(id.x, id.y + 1)];
+    
+    // Calculate divergence using central differences
+    float divergence = 0.5f * ((vR.x - vL.x) + (vT.y - vB.y));
+    
+    // Store result
+    DivergenceBuffer[index] = divergence;
+}
+
+// Single-iteration pressure solve kernel (kept for compatibility)
+[numthreads(8, 8, 1)]
+void PressureSolve(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)GridDimensions.x || id.y >= (uint)GridDimensions.y)
+        return;
+    
+    int index = GetIndex(id.x, id.y);
+    int2 coords = int2(id.x, id.y);
+    
+    // Skip boundaries, sources, and sinks - they maintain fixed pressure values
+    if (IsBoundary(coords) || IsSource(coords) || IsSink(coords))
+    {
+        return;
+    }
+    
+    // Get pressure from neighbors
+    float pL = PressureBuffer[GetIndex(id.x - 1, id.y)];
+    float pR = PressureBuffer[GetIndex(id.x + 1, id.y)];
+    float pB = PressureBuffer[GetIndex(id.x, id.y - 1)];
+    float pT = PressureBuffer[GetIndex(id.x, id.y + 1)];
+    
+    // Get divergence at current cell
+    float div = DivergenceBuffer[index];
+    
+    // Jacobi iteration for pressure
+    float pressure = (pL + pR + pB + pT - div) * 0.25f;
+    
+    // Store the new pressure
+    PressureBuffer[index] = pressure;
+}
+
+// Multi-iteration pressure solve kernel using ping-pong buffers
+[numthreads(8, 8, 1)]
+void PressureSolveMulti(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)GridDimensions.x || id.y >= (uint)GridDimensions.y)
+        return;
+    
+    int index = GetIndex(id.x, id.y);
+    int2 coords = int2(id.x, id.y);
+    
+    // Skip boundaries, sources, and sinks - they maintain fixed pressure values
+    if (IsBoundary(coords) || IsSource(coords) || IsSink(coords))
+    {
+        return;
+    }
+    
+    // Initialize both buffers with the same initial pressure values
+    PressureBufferAlt[index] = PressureBuffer[index];
+    
+    // Since we can't directly swap buffer references in HLSL, we'll track which buffer
+    // is currently the read buffer and which is the write buffer
+    bool readFromMain = true;
+    
+    // Perform all iterations in a single kernel dispatch
+    for (int iter = 0; iter < IterationCount; iter++)
+    {
+        // Get pressure from neighbors, reading from the current read buffer
+        float pL, pR, pB, pT;
+        
+        if (readFromMain)
+        {
+            pL = PressureBuffer[GetIndex(id.x - 1, id.y)];
+            pR = PressureBuffer[GetIndex(id.x + 1, id.y)];
+            pB = PressureBuffer[GetIndex(id.x, id.y - 1)];
+            pT = PressureBuffer[GetIndex(id.x, id.y + 1)];
+        }
+        else
+        {
+            pL = PressureBufferAlt[GetIndex(id.x - 1, id.y)];
+            pR = PressureBufferAlt[GetIndex(id.x + 1, id.y)];
+            pB = PressureBufferAlt[GetIndex(id.x, id.y - 1)];
+            pT = PressureBufferAlt[GetIndex(id.x, id.y + 1)];
+        }
+        
+        // Get divergence at current cell
+        float div = DivergenceBuffer[index];
+        
+        // Jacobi iteration for pressure
+        float newPressure = (pL + pR + pB + pT - div) * 0.25f;
+        
+        // Write the new pressure to the current write buffer
+        if (readFromMain)
+        {
+            PressureBufferAlt[index] = newPressure;
+        }
+        else
+        {
+            PressureBuffer[index] = newPressure;
+        }
+        
+        // Swap read and write buffers for the next iteration
+        readFromMain = !readFromMain;
+        
+        // Note: We can't use GroupMemoryBarrierWithGroupSync() here because
+        // threads from different thread groups need to synchronize.
+        // That's why we use the ping-pong buffer approach instead.
+    }
+    
+    // Ensure the final result is in PressureBuffer
+    // If we ended with PressureBufferAlt as the write buffer (odd number of iterations),
+    // we need to copy that data to PressureBuffer
+    if (readFromMain)
+    {
+        // No need to copy - the last iteration wrote to PressureBuffer
+    }
+    else
+    {
+        // Need to copy from PressureBufferAlt to PressureBuffer
+        PressureBuffer[index] = PressureBufferAlt[index];
+    }
+}
+
+// Apply pressure gradient to velocity to make it divergence-free
+[numthreads(8, 8, 1)]
+void PressureGradient(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint) GridDimensions.x || id.y >= (uint) GridDimensions.y)
+        return;
+    
+    int index = GetIndex(id.x, id.y);
+    int2 coords = int2(id.x, id.y);
+    
+    // Skip boundaries, sources, and sinks
+    if (IsBoundary(coords) || IsSource(coords) || IsSink(coords))
+        return;
+    
+    // Get current velocity
+    float3 velocity = VelocityBuffer[index];
+    
+    // Get pressure from neighbors
+    float pL = PressureBuffer[GetIndex(id.x - 1, id.y)];
+    float pR = PressureBuffer[GetIndex(id.x + 1, id.y)];
+    float pB = PressureBuffer[GetIndex(id.x, id.y - 1)];
+    float pT = PressureBuffer[GetIndex(id.x, id.y + 1)];
+    
+    // Calculate pressure gradient
+    float2 gradP = float2(pR - pL, pT - pB) * 0.5f;
+    
+    // Subtract gradient to make velocity divergence-free
+    velocity.xy -= gradP;
+    
+    // Update velocity
+    VelocityBuffer[index] = velocity;
+}
+
+// Apply boundary conditions
+[numthreads(8, 8, 1)]
+void ApplyBoundaries(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)GridDimensions.x || id.y >= (uint)GridDimensions.y)
+        return;
+    
+    int index = GetIndex(id.x, id.y);
+    int2 coords = int2(id.x, id.y);
+    
+    // Solid boundaries have zero velocity
+    if (IsBoundary(coords))
+    {
+        VelocityBuffer[index] = float3(0, 0, 0);
+        return;
+    }
+    
+    // For cells adjacent to boundaries, apply non-penetration condition
+    // This is a simplified approach; more accurate would involve checking each neighbor
+    bool nearBoundary = false;
+    
+    // Check left
+    if (id.x > 0)
+    {
+        int2 leftCoords = int2(id.x - 1, id.y);
+        if (IsBoundary(leftCoords))
+        {
+            VelocityBuffer[index].x = max(0, VelocityBuffer[index].x); // No flow into boundary
+            nearBoundary = true;
+        }
+    }
+    
+    // Check right
+    if (id.x < (uint) GridDimensions.x - 1)
+    {
+        int2 rightCoords = int2(id.x + 1, id.y);
+        if (IsBoundary(rightCoords))
+        {
+            VelocityBuffer[index].x = min(0, VelocityBuffer[index].x); // No flow into boundary
+            nearBoundary = true;
+        }
+    }
+    
+    // Check bottom
+    if (id.y > 0)
+    {
+        int2 bottomCoords = int2(id.x, id.y - 1);
+        if (IsBoundary(bottomCoords))
+        {
+            VelocityBuffer[index].y = max(0, VelocityBuffer[index].y); // No flow into boundary
+            nearBoundary = true;
+        }
+    }
+    
+    // Check top
+    if (id.y < (uint)GridDimensions.y - 1)
+    {
+        int2 topCoords = int2(id.x, id.y + 1);
+        if (IsBoundary(topCoords))
+        {
+            VelocityBuffer[index].y = min(0, VelocityBuffer[index].y); // No flow into boundary
+            nearBoundary = true;
+        }
+    }
+}
+
+// Visualize vector field using an ARGB32 texture
+// Maps velocity range [-1,1] to color range [0,255]
+[numthreads(8, 8, 1)]
+void VisualizeVectorField(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)GridDimensions.x || id.y >= (uint)GridDimensions.y)
+        return;
+    
+    int index = GetIndex(id.x, id.y);
+    int2 coords = int2(id.x, id.y);
+    
+    // Get the velocity at this point
+    float3 velocity = VelocityBuffer[index];
+    
+    // Determine cell type
+    float4 finalColor;
+    
+    if (IsBoundary(coords))
+    {
+        // Boundary cells are black
+        finalColor = float4(0, 0, 0, 1);
+    }
+    else if (IsSource(coords))
+    {
+        // Source cells are bright green
+        finalColor = float4(0, 1, 0, 1);
+    }
+    else if (IsSink(coords))
+    {
+        // Sink cells are bright red
+        finalColor = float4(1, 0, 0, 1);
+    }
+    else
+    {
+        // For fluid cells, map velocity components to RGB channels
+        // Map from [-1, 1] to [0, 1] range
+        float r = (velocity.x + 1.0) * 0.5;
+        float g = (velocity.y + 1.0) * 0.5;
+        
+        // Use velocity magnitude for the blue channel
+        float mag = length(velocity.xy) * 0.5; // Scale down for visualization
+        float b = clamp(mag, 0, 1);
+        
+        finalColor = float4(r, g, b, 1);
+    }
+    
+    // Write to the output texture
+    VisualizationTexture[id.xy] = finalColor;
+}

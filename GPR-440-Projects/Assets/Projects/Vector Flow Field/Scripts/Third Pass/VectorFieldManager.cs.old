@@ -1,0 +1,555 @@
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class VectorFieldManager : MonoBehaviour
+{
+    //Singleton instance
+    private static VectorFieldManager _instance;
+
+    /// <summary>
+    /// Gets the singleton instance of the VectorFieldManager.
+    /// </summary>
+    public static VectorFieldManager Instance
+    {
+        get
+        {
+            if (_instance == null)
+            {
+                _instance = FindObjectOfType<VectorFieldManager>();
+
+                if (_instance == null)
+                {
+                    Debug.LogError("No VectorFieldManager found in the scene. Ensure one exists.");
+                }
+            }
+            return _instance;
+        }
+    }
+
+    // Simulation parameters
+    [SerializeField] private Vector2Int gridDimensions = new Vector2Int(64, 64); // Grid dimensions (width, height)
+    [SerializeField] private ComputeShader fluidShader;
+    [SerializeField] private Texture2D boundaryTexture; // Texture defining boundaries and sources/sinks
+    private bool boundaryTextureNeedsUpdate = true;
+    [SerializeField] private float sourceStrength = 5.0f; // How strong source pressure is (positive value)
+    [SerializeField] private float sinkStrength = 5.0f; // How strong sink pressure is (positive value, applied as negative)
+    [SerializeField] private Vector2 sourceDirection = Vector2.up; // Default direction for sources
+    [SerializeField] private Vector2 sinkDirection = Vector2.down; // Default direction for sinks
+    [SerializeField] private int pressureSolveIterations = 20; // Number of pressure solve iterations
+    [SerializeField] private bool useMultiIterationPressureSolve = true; // Whether to use optimized multi-iteration pressure solve
+    
+    // World space bounds
+    [Header("World Space Mapping")]
+    [SerializeField] private Transform minBounds; // Transform representing minimum bounds in world space
+    [SerializeField] private Transform maxBounds; // Transform representing maximum bounds in world space
+    [SerializeField] private bool drawGizmos = true; // Whether to draw gizmos for the bounds
+    
+    // Dynamic sources and sinks
+    [Header("Dynamic Sources & Sinks")]
+    [SerializeField] private List<VectorFieldSource> sourceObjects = new List<VectorFieldSource>();
+    [SerializeField] private List<VectorFieldSink> sinkObjects = new List<VectorFieldSink>();
+    [SerializeField] private bool useSourcesFromTexture = true; // Whether to use sources defined in the boundary texture
+    [SerializeField] private bool useSinksFromTexture = true; // Whether to use sinks defined in the boundary texture
+    
+    // Visualization
+    [Header("Visualization")]
+    [SerializeField] private RenderTexture visualizationTexture; // For displaying the vector field
+    [SerializeField] private bool visualizeFlow = true; // Whether to update the visualization each frame
+    
+    // Compute buffers
+    private ComputeBuffer velocityBuffer; // Stores velocity vectors
+    private ComputeBuffer pressureBuffer; // For pressure calculations
+    private ComputeBuffer pressureBufferAlt; // Second buffer for ping-pong technique in multi-iteration pressure solve
+    private ComputeBuffer divergenceBuffer; // For incompressibility constraint
+    
+    // For sampling the velocity field in CPU code
+    private Vector3[] velocityArray;
+    private bool velocityArrayNeedsUpdate = true;
+    
+    // Kernel IDs
+    private int advectionKernelId;
+    private int divergenceKernelId;
+    private int pressureSolveKernelId;
+    private int pressureSolveMultiKernelId;
+    private int pressureGradientKernelId;
+    private int applyBoundariesKernelId;
+    private int applySourcesAndSinksKernelId;
+    private int visualizeVectorFieldKernelId;
+    
+    void Start()
+    {       
+        InitializeBuffers();
+        InitializeKernels();
+        
+        // Make sure the texture is set initially
+        boundaryTextureNeedsUpdate = true;
+    }
+    
+    void InitializeBuffers()
+    {
+        int totalCells = gridDimensions.x * gridDimensions.y; // Total cells in the grid
+        
+        // For velocity, we need 3 floats per cell (vx, vy, vz)
+        int velocityStride = sizeof(float) * 3;
+        velocityBuffer = new ComputeBuffer(totalCells, velocityStride);
+        
+        // Initialize with zero velocities
+        Vector3[] initialVelocities = new Vector3[totalCells];
+        for (int i = 0; i < totalCells; i++)
+        {
+            initialVelocities[i] = Vector3.zero;
+        }
+        velocityBuffer.SetData(initialVelocities);
+        
+        // Initialize the array for CPU-side sampling
+        velocityArray = new Vector3[totalCells];
+        
+        // Other buffers needed for Navier-Stokes
+        pressureBuffer = new ComputeBuffer(totalCells, sizeof(float));
+        pressureBufferAlt = new ComputeBuffer(totalCells, sizeof(float)); // Second buffer for ping-pong technique
+        divergenceBuffer = new ComputeBuffer(totalCells, sizeof(float));
+        
+        // Fill with zeros initially
+        float[] zeroData = new float[totalCells];
+        pressureBuffer.SetData(zeroData);
+        pressureBufferAlt.SetData(zeroData);
+        divergenceBuffer.SetData(zeroData);
+        
+        // Create the visualization texture if needed
+        if (visualizationTexture == null || 
+            visualizationTexture.width != gridDimensions.x || 
+            visualizationTexture.height != gridDimensions.y)
+        {
+            if (visualizationTexture != null)
+                visualizationTexture.Release();
+                
+            visualizationTexture = new RenderTexture(gridDimensions.x, gridDimensions.y, 0, RenderTextureFormat.ARGB32);
+            visualizationTexture.enableRandomWrite = true;
+            visualizationTexture.Create();
+        }
+    }
+    
+    void InitializeKernels()
+    {
+        // Get kernel IDs for the simulation steps
+        advectionKernelId = fluidShader.FindKernel("Advection");
+        divergenceKernelId = fluidShader.FindKernel("Divergence");
+        pressureSolveKernelId = fluidShader.FindKernel("PressureSolve");
+        pressureSolveMultiKernelId = fluidShader.FindKernel("PressureSolveMulti");
+        pressureGradientKernelId = fluidShader.FindKernel("PressureGradient");
+        applyBoundariesKernelId = fluidShader.FindKernel("ApplyBoundaries");
+        applySourcesAndSinksKernelId = fluidShader.FindKernel("ApplySourcesAndSinks");
+        visualizeVectorFieldKernelId = fluidShader.FindKernel("VisualizeVectorField");
+        
+        // Set shared parameters
+        fluidShader.SetVector("GridDimensions", new Vector4(gridDimensions.x, gridDimensions.y, 0, 0));
+        fluidShader.SetFloat("SourceStrength", sourceStrength);
+        fluidShader.SetFloat("SinkStrength", sinkStrength);
+        
+        // Boundary texture is set separately in UpdateBoundaryTexture()
+        
+        // Set the visualization texture
+        fluidShader.SetTexture(visualizeVectorFieldKernelId, "VisualizationTexture", visualizationTexture);
+        
+        // Bind buffers to all kernels
+        BindBuffersToKernel(advectionKernelId);
+        BindBuffersToKernel(divergenceKernelId);
+        BindBuffersToKernel(pressureSolveKernelId);
+        BindBuffersToKernel(pressureSolveMultiKernelId);
+        BindBuffersToKernel(pressureGradientKernelId);
+        BindBuffersToKernel(applyBoundariesKernelId);
+        BindBuffersToKernel(applySourcesAndSinksKernelId);
+        BindBuffersToKernel(visualizeVectorFieldKernelId);
+    }
+    
+    void BindBuffersToKernel(int kernelId)
+    {
+        fluidShader.SetBuffer(kernelId, "VelocityBuffer", velocityBuffer);
+        fluidShader.SetBuffer(kernelId, "PressureBuffer", pressureBuffer);
+        fluidShader.SetBuffer(kernelId, "PressureBufferAlt", pressureBufferAlt);
+        fluidShader.SetBuffer(kernelId, "DivergenceBuffer", divergenceBuffer);
+    }
+    
+    void Update()
+    {
+        // Check if transforms exist
+        if (minBounds == null || maxBounds == null)
+        {
+            Debug.LogWarning("Min or Max bounds transform not set. World space mapping will not work correctly.");
+        }
+        
+        // Check if boundary texture exists
+        if (boundaryTexture == null)
+        {
+            Debug.LogWarning("Boundary texture not assigned. Simulation may not work correctly.");
+        }
+        
+        // Update the boundary texture in the compute shader if needed
+        if (boundaryTextureNeedsUpdate)
+        {
+            UpdateBoundaryTexture();
+        }
+        
+        // Apply sources and sinks first to ensure they're always active
+        ApplySourcesAndSinks();
+        
+        // Run the simulation steps
+        RunAdvection();
+        RunDivergence();
+        RunPressureSolve();
+        RunPressureGradient();
+        ApplyBoundaries();
+        
+        // Apply sources and sinks again to ensure they override any changes
+        ApplySourcesAndSinks();
+        
+        // Mark that the CPU-side array needs updating
+        velocityArrayNeedsUpdate = true;
+        
+        // Visualize the vector field if requested
+        if (visualizeFlow)
+        {
+            UpdateVectorFieldVisualization();
+        }
+
+        VerifyVelocity();
+    }
+    
+    /// <summary>
+    /// Updates the boundary texture in the compute shader
+    /// </summary>
+    void UpdateBoundaryTexture()
+    {
+        if (boundaryTexture == null)
+            return;
+            
+        // Set the boundary texture for all kernels
+        SetBoundaryTextureForAllKernels();
+        
+        // Reset the flag
+        boundaryTextureNeedsUpdate = false;
+    }
+    
+    /// <summary>
+    /// Sets the boundary texture for all kernels in the compute shader
+    /// </summary>
+    void SetBoundaryTextureForAllKernels()
+    {
+        fluidShader.SetTexture(advectionKernelId, "BoundaryTexture", boundaryTexture);
+        fluidShader.SetTexture(divergenceKernelId, "BoundaryTexture", boundaryTexture);
+        fluidShader.SetTexture(pressureSolveKernelId, "BoundaryTexture", boundaryTexture);
+        fluidShader.SetTexture(pressureSolveMultiKernelId, "BoundaryTexture", boundaryTexture);
+        fluidShader.SetTexture(pressureGradientKernelId, "BoundaryTexture", boundaryTexture);
+        fluidShader.SetTexture(applyBoundariesKernelId, "BoundaryTexture", boundaryTexture);
+        fluidShader.SetTexture(applySourcesAndSinksKernelId, "BoundaryTexture", boundaryTexture);
+        fluidShader.SetTexture(visualizeVectorFieldKernelId, "BoundaryTexture", boundaryTexture);
+    }
+    
+    void UpdateVectorFieldVisualization()
+    {
+        // Run the visualization kernel
+        fluidShader.Dispatch(visualizeVectorFieldKernelId, Mathf.CeilToInt(gridDimensions.x / 8.0f), Mathf.CeilToInt(gridDimensions.y / 8.0f), 1);
+    }
+    
+    void RunAdvection()
+    {
+        fluidShader.SetFloat("DeltaTime", Time.deltaTime);
+        fluidShader.Dispatch(advectionKernelId, Mathf.CeilToInt(gridDimensions.x / 8.0f), Mathf.CeilToInt(gridDimensions.y / 8.0f), 1);
+    }
+    
+    void ApplySourcesAndSinks()
+    {
+        // First apply sources and sinks from the texture
+        if (useSourcesFromTexture || useSinksFromTexture)
+        {
+            fluidShader.Dispatch(applySourcesAndSinksKernelId, Mathf.CeilToInt(gridDimensions.x / 8.0f), Mathf.CeilToInt(gridDimensions.y / 8.0f), 1);
+        }
+        
+        // Then apply sources and sinks from the dynamic objects
+        ApplyDynamicSourcesAndSinks();
+    }
+    
+    void ApplyDynamicSourcesAndSinks()
+    {
+        // Skip if there are no dynamic sources or sinks
+        if (sourceObjects.Count == 0 && sinkObjects.Count == 0)
+            return;
+        
+        // Make sure we have valid bounds
+        if (minBounds == null || maxBounds == null)
+        {
+            Debug.LogWarning("Cannot apply dynamic sources/sinks: Min or Max bounds transform not set.");
+            return;
+        }
+        
+        // Get local copy of pressure buffer data
+        float[] pressureData = new float[gridDimensions.x * gridDimensions.y];
+        pressureBuffer.GetData(pressureData);
+        
+        // Apply dynamic sources
+        foreach (var source in sourceObjects)
+        {
+            if (source == null) continue;
+            
+            // Convert world position to grid coordinates
+            Vector2 gridPos = WorldToGridPosition(source.transform.position);
+            
+            // Convert the world-space radius to grid space
+            Vector3 worldSize = maxBounds.position - minBounds.position;
+            float gridRadius = source.radius / Mathf.Max(worldSize.x, worldSize.y) * Mathf.Max(gridDimensions.x, gridDimensions.y);
+            
+            // Apply source pressure to cells within radius
+            ApplyInfluence(gridPos, gridRadius, source.strength, pressureData);
+        }
+        
+        // Apply dynamic sinks
+        foreach (var sink in sinkObjects)
+        {
+            if (sink == null) continue;
+            
+            // Convert world position to grid coordinates
+            Vector2 gridPos = WorldToGridPosition(sink.transform.position);
+            
+            // Convert the world-space radius to grid space
+            Vector3 worldSize = maxBounds.position - minBounds.position;
+            float gridRadius = sink.radius / Mathf.Max(worldSize.x, worldSize.y) * Mathf.Max(gridDimensions.x, gridDimensions.y);
+            
+            // Apply sink pressure to cells within radius (negative strength)
+            ApplyInfluence(gridPos, gridRadius, sink.strength, pressureData);
+        }
+        
+        // Update the pressure buffer with our modifications
+        pressureBuffer.SetData(pressureData);
+        
+        // Also update the alternate pressure buffer for multi-step pressure solving
+        pressureBufferAlt.SetData(pressureData);
+    }
+    
+    void ApplyInfluence(Vector2 gridPos, float radius, float strength, float[] pressureData)
+    {
+        // Calculate the grid cell range that might be affected
+        int minX = Mathf.Max(0, Mathf.FloorToInt(gridPos.x - radius));
+        int maxX = Mathf.Min(gridDimensions.x - 1, Mathf.CeilToInt(gridPos.x + radius));
+        int minY = Mathf.Max(0, Mathf.FloorToInt(gridPos.y - radius));
+        int maxY = Mathf.Min(gridDimensions.y - 1, Mathf.CeilToInt(gridPos.y + radius));
+        
+        float sqrRadius = radius * radius;
+        
+        // Apply influence to cells within radius
+        for (int y = minY; y <= maxY; y++)
+        {
+            for (int x = minX; x <= maxX; x++)
+            {
+                // Calculate squared distance to the center
+                float dx = x - gridPos.x;
+                float dy = y - gridPos.y;
+                float sqrDist = dx * dx + dy * dy;
+                
+                // Skip cells outside the radius
+                if (sqrDist > sqrRadius)
+                    continue;
+                
+                // Calculate index in the grid
+                int index = y * gridDimensions.x + x;
+                
+                // Calculate influence strength based on distance (linear falloff)
+                float influence = 1.0f - Mathf.Sqrt(sqrDist) / radius;
+                
+                // Apply the influence
+                pressureData[index] = strength * influence;
+            }
+        }
+    }
+    
+    void RunDivergence()
+    {
+        fluidShader.Dispatch(divergenceKernelId, Mathf.CeilToInt(gridDimensions.x / 8.0f), Mathf.CeilToInt(gridDimensions.y / 8.0f), 1);
+    }
+    
+    void RunPressureSolve()
+    {
+        if (useMultiIterationPressureSolve)
+        {
+            // Set the iteration count parameter for the multi-iteration kernel
+            fluidShader.SetInt("IterationCount", pressureSolveIterations);
+            
+            // Single dispatch that performs all iterations internally
+            fluidShader.Dispatch(pressureSolveMultiKernelId, Mathf.CeilToInt(gridDimensions.x / 8.0f), Mathf.CeilToInt(gridDimensions.y / 8.0f), 1);
+        }
+        else
+        {
+            // Traditional approach with multiple dispatches (one per iteration)
+            for (int i = 0; i < pressureSolveIterations; i++)
+            {
+                fluidShader.Dispatch(pressureSolveKernelId, Mathf.CeilToInt(gridDimensions.x / 8.0f), Mathf.CeilToInt(gridDimensions.y / 8.0f), 1);
+            }
+        }
+    }
+    
+    void RunPressureGradient()
+    {
+        fluidShader.Dispatch(pressureGradientKernelId, Mathf.CeilToInt(gridDimensions.x / 8.0f), Mathf.CeilToInt(gridDimensions.y / 8.0f), 1);
+    }
+    
+    void ApplyBoundaries()
+    {
+        fluidShader.Dispatch(applyBoundariesKernelId, Mathf.CeilToInt(gridDimensions.x / 8.0f), Mathf.CeilToInt(gridDimensions.y / 8.0f), 1);
+    }
+    
+    void OnDestroy()
+    {
+        // Release all buffers to prevent memory leaks
+        velocityBuffer?.Release();
+        pressureBuffer?.Release();
+        pressureBufferAlt?.Release();
+        divergenceBuffer?.Release();
+        
+        // Release the visualization texture
+        if (visualizationTexture != null)
+        {
+            visualizationTexture.Release();
+            visualizationTexture = null;
+        }
+    }
+    
+    // This method allows other scripts to get the visualization texture
+    public RenderTexture GetVisualizationTexture()
+    {
+        return visualizationTexture;
+    }
+    
+    /// <summary>
+    /// Gets the velocity vector at a specified world position by sampling the fluid simulation.
+    /// </summary>
+    /// <param name="worldPosition">Position in world space to sample</param>
+    /// <returns>Velocity vector at the specified position (returns zero if position is outside bounds)</returns>
+    public Vector3 GetVelocityAtPosition(Vector3 worldPosition)
+    {
+        // Check if we have valid bounds
+        if (minBounds == null || maxBounds == null)
+        {
+            Debug.LogWarning("Cannot sample velocity: Min or Max bounds transform not set.");
+            return Vector3.zero;
+        }
+        
+        // Convert world position to normalized grid position
+        Vector2 gridPos = WorldToGridPosition(worldPosition);
+        
+        // Check if position is within bounds
+        if (gridPos.x < 0 || gridPos.x > 1 || gridPos.y < 0 || gridPos.y > 1)
+        {
+            // Position is outside the grid bounds
+            return Vector3.zero;
+        }
+        
+        // Sample the velocity at this position
+        return SampleVelocityField(gridPos);
+    }
+    
+    /// <summary>
+    /// Converts a world space position to normalized grid coordinates (0-1)
+    /// </summary>
+    private Vector2 WorldToGridPosition(Vector3 worldPosition)
+    {
+        // Get the bounds in world space
+        Vector3 min = minBounds.position;
+        Vector3 max = maxBounds.position;
+        
+        // Calculate normalized position within bounds (0 to 1)
+        float normalizedX = Mathf.InverseLerp(min.x, max.x, worldPosition.x);
+        float normalizedY = Mathf.InverseLerp(min.y, max.y, worldPosition.y);
+        
+        return new Vector2(normalizedX, normalizedY);
+    }
+    
+    /// <summary>
+    /// Samples the velocity field at the given normalized position (0-1, 0-1)
+    /// Uses bilinear interpolation between grid cells
+    /// </summary>
+    private Vector3 SampleVelocityField(Vector2 normalizedPosition)
+    {
+        // Ensure our CPU-side array is up to date
+        UpdateVelocityArray();
+        
+        // Convert normalized position to grid position
+        float gridX = normalizedPosition.x * (gridDimensions.x - 1);
+        float gridY = normalizedPosition.y * (gridDimensions.y - 1);
+        
+        // Get the four nearest grid points
+        int x0 = Mathf.FloorToInt(gridX);
+        int y0 = Mathf.FloorToInt(gridY);
+        int x1 = Mathf.Min(x0 + 1, gridDimensions.x - 1);
+        int y1 = Mathf.Min(y0 + 1, gridDimensions.y - 1);
+        
+        // Calculate interpolation factors
+        float tx = gridX - x0;
+        float ty = gridY - y0;
+        
+        // Get velocity values at the four corners
+        Vector3 v00 = velocityArray[y0 * gridDimensions.x + x0];
+        Vector3 v10 = velocityArray[y0 * gridDimensions.x + x1];
+        Vector3 v01 = velocityArray[y1 * gridDimensions.x + x0];
+        Vector3 v11 = velocityArray[y1 * gridDimensions.x + x1];
+        
+        // Perform bilinear interpolation
+        Vector3 vx0 = Vector3.Lerp(v00, v10, tx);
+        Vector3 vx1 = Vector3.Lerp(v01, v11, tx);
+        Vector3 result = Vector3.Lerp(vx0, vx1, ty);
+        
+        return result;
+    }
+    
+    /// <summary>
+    /// Updates the CPU-side velocity array from the GPU buffer
+    /// </summary>
+    private void UpdateVelocityArray()
+    {
+        if (velocityArrayNeedsUpdate)
+        {
+            // Copy data from GPU to CPU
+            velocityBuffer.GetData(velocityArray);
+            velocityArrayNeedsUpdate = false;
+        }
+    }
+    
+    /// <summary>
+    /// Draws gizmos to visualize the bounds of the vector field
+    /// </summary>
+    void OnDrawGizmos()
+    {
+        if (!Application.isPlaying || velocityArray == null || !drawGizmos)
+            return;
+
+        // Draw velocity vectors at sample points
+        Gizmos.color = Color.cyan;
+        float spacing = 4.0f; // Sample every 4 cells
+
+        Vector3 size = maxBounds.position - minBounds.position;
+        for (float x = 0; x <= 1.0f; x += 1.0f / spacing)
+        {
+            for (float y = 0; y <= 1.0f; y += 1.0f / spacing)
+            {
+                Vector3 worldPos = minBounds.position + new Vector3(x * size.x, y * size.y, 0);
+                Vector3 vel = GetVelocityAtPosition(worldPos);
+
+                // Scale up the velocity for visibility
+                Gizmos.DrawRay(worldPos, vel * 2.0f);
+            }
+        }
+    }
+
+    void VerifyVelocity()
+    {
+        Vector3[] testVel = new Vector3[velocityArray.Length];
+        velocityBuffer.GetData(testVel);
+
+        float maxMag = 0;
+        for (int i = 0; i < testVel.Length; i++)
+        {
+            maxMag = Mathf.Max(maxMag, testVel[i].magnitude);
+        }
+
+        Debug.Log($"Max velocity magnitude: {maxMag}");
+    }
+}

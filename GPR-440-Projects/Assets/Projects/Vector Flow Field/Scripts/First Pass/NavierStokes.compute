@@ -1,0 +1,181 @@
+// NavierStokes.compute
+#pragma kernel Advect
+#pragma kernel ApplyForces
+#pragma kernel ComputeDivergence
+#pragma kernel SolvePressure
+#pragma kernel Project
+#pragma kernel Visualize
+
+SamplerState sampler_point_clamp;
+Texture2D<float4> InputTexture;
+RWTexture2D<float2> Velocity;
+RWTexture2D<float2> PrevVelocity;
+RWTexture2D<float> Pressure;
+RWTexture2D<float> PressureOut;
+RWTexture2D<float> Divergence;
+RWTexture2D<float4> OutputTexture;
+
+float2 TexelSize;
+float DeltaTime;
+
+#define DT DeltaTime
+#define DX TexelSize.x
+
+static const float2 offsets[4] =
+{
+    float2(1, 0),
+    float2(-1, 0),
+    float2(0, 1),
+    float2(0, -1)
+};
+
+bool IsFluid(float2 uv)
+{
+    float4 col = InputTexture.SampleLevel(sampler_point_clamp, uv, 0);
+    return col.r > 0.5 && col.g > 0.5; // White cells
+}
+
+bool IsSink(float2 uv)
+{
+    float4 col = InputTexture.SampleLevel(sampler_point_clamp, uv, 0);
+    return col.r > 0.5 && col.g < 0.5; // Red cells
+}
+
+[numthreads(8, 8, 1)]
+void Advect(uint3 id : SV_DispatchThreadID)
+{
+    float2 uv = id.xy * TexelSize;
+    
+    if (!IsFluid(uv))
+        return;
+
+    float2 vel = Velocity[id.xy];
+    float2 prevPos = uv - vel * DT;
+    {
+        // Convert prevPos (in UV space) to pixel space coordinates.
+        float2 pos = prevPos / TexelSize;
+        int2 ipos = int2(floor(pos));
+        float2 f = pos - ipos;
+        float2 v00 = Velocity.Load(int3(ipos, 0));
+        float2 v10 = Velocity.Load(int3(ipos + int2(1, 0), 0));
+        float2 v01 = Velocity.Load(int3(ipos + int2(0, 1), 0));
+        float2 v11 = Velocity.Load(int3(ipos + int2(1, 1), 0));
+        float2 interpolated = lerp(lerp(v00, v10, f.x), lerp(v01, v11, f.x), f.y);
+        // NOTE: No clamping is applied when sampling neighboring velocities.
+        // Consider clamping the computed indices to valid texture coordinates to avoid out-of-bound access.
+        PrevVelocity[id.xy] = interpolated;
+    }
+}
+
+[numthreads(8, 8, 1)]
+void ApplyForces(uint3 id : SV_DispatchThreadID)
+{
+    float2 uv = id.xy * TexelSize;
+    float2 vel = PrevVelocity[id.xy];
+
+    // Apply sink forces
+    if (IsSink(uv))
+    {
+        vel = float2(0, 0); // Sinks absorb momentum
+    }
+
+    Velocity[id.xy] = vel;
+}
+
+[numthreads(8, 8, 1)]
+void ComputeDivergence(uint3 id : SV_DispatchThreadID)
+{
+    float2 uv = id.xy * TexelSize;
+    
+    if (!IsFluid(uv) || IsSink(uv))
+        return;
+        
+    uint width = (uint)(1.0 / TexelSize.x);
+    uint height = (uint)(1.0 / TexelSize.y);
+    uint2 pos = id.xy;
+    uint2 posRight = clamp(pos + uint2(1, 0), uint2(0, 0), uint2(width - 1, height - 1));
+    uint2 posLeft = clamp(pos - uint2(1, 0), uint2(0, 0), uint2(width - 1, height - 1));
+    uint2 posUp = clamp(pos + uint2(0, 1), uint2(0, 0), uint2(width - 1, height - 1));
+    uint2 posDown = clamp(pos - uint2(0, 1), uint2(0, 0), uint2(width - 1, height - 1));
+
+    float2 velRight = Velocity[posRight];
+    float2 velLeft = Velocity[posLeft];
+    float2 velUp = Velocity[posUp];
+    float2 velDown = Velocity[posDown];
+
+    float div = 0.5 * ((velRight.x - velLeft.x) + (velUp.y - velDown.y)) / DX;
+    Divergence[id.xy] = div;
+}
+
+[numthreads(8, 8, 1)]
+void SolvePressure(uint3 id : SV_DispatchThreadID)
+{
+    float2 uv = id.xy * TexelSize;
+    
+    if (IsSink(uv))
+    {
+        PressureOut[id.xy] = 0.0; // Set sink pressure to 0 in the output buffer.
+        return;
+    }
+    if (!IsFluid(uv))
+    {
+        PressureOut[id.xy] = Pressure[id.xy]; // Optionally, pass through or set to a default value.
+        return;
+    }
+
+    float p = 0.0;
+    float count = 0.0;
+    
+    for (int i = 0; i < 4; i++)
+    {
+        uint2 nID = id.xy + offsets[i];
+        float2 nUV = nID * TexelSize;
+        
+        if (IsFluid(nUV) || IsSink(nUV))
+        {
+            p += Pressure[nID];
+            count += 1.0;
+        }
+    }
+    // NOTE: The neighboring indices (nID) are not clamped to the texture dimensions.
+    // This may lead to out-of-bound access when processing edge pixels.
+    // Consider clamping nID using:
+    //     nID = clamp(id.xy + offsets[i], uint2(0, 0), uint2(width - 1, height - 1));
+    
+    float b = Divergence[id.xy];
+    PressureOut[id.xy] = (p - DX * DX * b) / max(count, 1.0);
+}
+
+
+[numthreads(8, 8, 1)]
+void Project(uint3 id : SV_DispatchThreadID)
+{
+    float2 uv = id.xy * TexelSize;
+    
+    if (!IsFluid(uv))
+        return;
+
+    float pRight = Pressure[id.xy + uint2(1, 0)];
+    float pLeft = Pressure[id.xy - uint2(1, 0)];
+    float pUp = Pressure[id.xy + uint2(0, 1)];
+    float pDown = Pressure[id.xy - uint2(0, 1)];
+    // NOTE: The neighboring indices (id.xy ± uint2(...)) are not clamped to the texture boundaries.
+    // This may lead to out-of-bound accesses for edge pixels.
+    // Consider clamping the indices to valid ranges, e.g.:
+    //     uint2 clampedID = clamp(id.xy + offset, uint2(0, 0), uint2(width - 1, height - 1));
+
+    float2 gradP = 0.5 * float2(pRight - pLeft, pUp - pDown) / DX;
+    Velocity[id.xy] -= gradP;
+}
+
+[numthreads(8, 8, 1)]
+void Visualize(uint3 id : SV_DispatchThreadID)
+{
+    float2 uv = id.xy * TexelSize;
+    float2 vel = Velocity[id.xy];
+    
+    // Safely compute the normalized velocity
+    float len = length(vel);
+    float2 dir = (len > 0.0001) ? normalize(vel) : float2(0, 0);
+    OutputTexture[id.xy] = float4(dir * 0.5 + 0.5, 0.0, 1.0);
+}
