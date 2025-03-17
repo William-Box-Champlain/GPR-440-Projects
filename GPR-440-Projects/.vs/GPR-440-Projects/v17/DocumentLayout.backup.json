@@ -7,20 +7,20 @@
       "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fourth pass\\vectorflowfield.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\assets\\projects\\vector flow field\\scripts\\fourth pass\\vffcalculator.compute||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fourth pass\\vffcalculator.compute||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\assets\\projects\\vector flow field\\scripts\\fourth pass\\boundscalculator.compute||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fourth pass\\boundscalculator.compute||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\fourth pass\\vectorflowfieldmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\assets\\projects\\vector flow field\\scripts\\fourth pass\\vectorflowfieldmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fourth pass\\vectorflowfieldmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\assets\\projects\\vector flow field\\scripts\\fourth pass\\vectorflowfieldagent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fourth pass\\vectorflowfieldagent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{32429C73-B196-9764-2741-319F44221039}|VFF.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\second pass\\meshtexturegenerator.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{32429C73-B196-9764-2741-319F44221039}|VFF.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\second pass\\meshtexturegenerator.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{32429C73-B196-9764-2741-319F44221039}|VFF.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\second pass\\navmeshtotextureexample.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{32429C73-B196-9764-2741-319F44221039}|VFF.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\second pass\\navmeshtotextureexample.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{32429C73-B196-9764-2741-319F44221039}|VFF.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\second pass\\meshprocessor.compute||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{32429C73-B196-9764-2741-319F44221039}|VFF.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\second pass\\meshprocessor.compute||{8B382828-6202-11D1-8870-0000F87579D2}"
     }
   ],
   "DocumentGroupContainers": [
@@ -30,11 +30,50 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 1,
+          "SelectedChildIndex": 4,
           "Children": [
             {
               "$type": "Bookmark",
               "Name": "ST:128:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "MeshProcessor.compute",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\MeshProcessor.compute",
+              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\MeshProcessor.compute",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\MeshProcessor.compute",
+              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\MeshProcessor.compute",
+              "ViewState": "AgIAAEIAAAAAAAAAAAAAAFEAAAAiAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
+              "WhenOpened": "2025-03-17T14:11:01.008Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "NavMeshToTextureExample.cs",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\NavMeshToTextureExample.cs",
+              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\NavMeshToTextureExample.cs",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\NavMeshToTextureExample.cs",
+              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\NavMeshToTextureExample.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAFwAAAAjAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-03-17T13:49:47.462Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "MeshTextureGenerator.cs",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\MeshTextureGenerator.cs",
+              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\MeshTextureGenerator.cs",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\MeshTextureGenerator.cs",
+              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\MeshTextureGenerator.cs",
+              "ViewState": "AgIAAAMAAAAAAAAAAAAAABQAAAA3AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-03-17T13:49:44.832Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
@@ -44,59 +83,20 @@
               "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowField.cs",
               "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowField.cs",
               "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowField.cs",
-              "ViewState": "AgIAAMAAAAAAAAAAAAAMwNAAAAA5AAAAAAAAAA==",
+              "ViewState": "AgIAAIkAAAAAAAAAAAAjwIoAAAAeAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-03-16T13:59:59.663Z",
+              "WhenOpened": "2025-03-17T14:06:03.404Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 1,
-              "Title": "VFFCalculator.compute",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VFFCalculator.compute",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VFFCalculator.compute",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VFFCalculator.compute",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VFFCalculator.compute",
-              "ViewState": "AgIAAPMAAAAAAAAAAAAEwAMBAAA6AAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
-              "WhenOpened": "2025-03-16T09:00:59.804Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "BoundsCalculator.compute",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\BoundsCalculator.compute",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\BoundsCalculator.compute",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\BoundsCalculator.compute",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\BoundsCalculator.compute",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAUAAAAcAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
-              "WhenOpened": "2025-03-16T05:02:13.581Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "VectorFlowFieldAgent.cs",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldAgent.cs",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldAgent.cs",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldAgent.cs",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldAgent.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAAqAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-03-16T00:34:01.231Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
               "Title": "VectorFlowFieldManager.cs",
               "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldManager.cs",
               "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldManager.cs",
               "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldManager.cs",
               "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VectorFlowFieldManager.cs",
-              "ViewState": "AgIAADQAAAAAAAAAAAAIwE0AAAA+AAAAAAAAAA==",
+              "ViewState": "AgIAADcAAAAAAAAAAAAMwFEAAAAjAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-03-16T00:32:09.782Z",
               "EditorCaption": ""

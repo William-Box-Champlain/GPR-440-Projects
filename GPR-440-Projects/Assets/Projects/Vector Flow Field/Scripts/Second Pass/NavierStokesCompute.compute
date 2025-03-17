@@ -1,0 +1,966 @@
+// NavierStokesCompute.compute
+// Compute shader for Vector Flow Field calculation using Navier-Stokes equations
+
+// Kernel definitions
+#pragma kernel SetupField        // Initialize the simulation based on input texture
+#pragma kernel GenerateBoundaryInfo // Generate boundary information texture
+#pragma kernel Advect            // Advection step
+#pragma kernel DiffuseBatch      // Diffusion step (multiple iterations in one batch)
+#pragma kernel ComputeDivergence // Calculate divergence
+#pragma kernel SolvePressureBatch // Solve pressure equation (multiple iterations in one batch)
+#pragma kernel PropagateGlobalPressure // Global pressure propagation step
+#pragma kernel Project           // Project velocity to be divergence-free
+#pragma kernel ApplySinkSource   // Apply sink and source forces
+#pragma kernel ExtrapolateVelocity // Extrapolate velocity from valid cells to invalid cells
+#pragma kernel FillZeroVelocity  // Fill zero-velocity regions within the field
+#pragma kernel AddVorticity      // Add vorticity confinement to enhance rotational flow
+#pragma kernel SamplePoint       // Sample a single point from the velocity field
+
+// Texture declarations
+Texture2D<float4> InputTexture;          // Input bitmap texture (RGBA)
+RWTexture2D<float4> Velocity;            // Velocity field (ARGB = -x, +x, -y, +y)
+RWTexture2D<float4> VelocityTemp;        // Temporary velocity buffer
+RWTexture2D<float> Pressure;             // Pressure field
+RWTexture2D<float> PressureTemp;         // Temporary pressure buffer
+RWTexture2D<float> GlobalPressure;       // Global pressure field
+RWTexture2D<float> Divergence;           // Divergence field
+RWTexture2D<uint> BoundaryInfo;          // Pre-computed boundary information (bit flags for neighbors)
+RWStructuredBuffer<float4> SampleResult; // Buffer to store the result of sampling
+
+// Simulation parameters
+float2 TexelSize;                        // 1/width, 1/height
+int2 Resolution;                         // Grid resolution (width, height)
+float DeltaTime;                         // Time step
+float Viscosity;                         // Fluid viscosity
+float SinkStrength;                      // Strength of sink forces
+float SourceStrength;                    // Strength of source forces
+float GlobalPressureStrength;            // Strength of global pressure influence
+int DiffusionBatchSize;                  // Number of iterations to perform in diffusion batch
+int PressureBatchSize;                   // Number of iterations to perform in pressure batch
+int GlobalPressureIterations;            // Number of iterations for global pressure propagation
+float2 SamplePosition;                   // Normalized position to sample (0-1)
+
+// Sampling state
+SamplerState sampler_point_clamp;
+
+// Constants
+static const float2 offsets[4] = {
+    float2(1, 0),
+    float2(-1, 0),
+    float2(0, 1),
+    float2(0, -1)
+};
+
+// Simulation constants
+static const float DIFFUSION_CENTER_FACTOR = 4.0f;   // Factor for center cell in diffusion
+static const float VELOCITY_DECAY = 0.99f;           // Decay factor for isolated cells
+static const int FORCE_RADIUS = 5;                   // Radius for sink/source force calculation (increased from 3)
+static const float MAX_FORCE_DISTANCE = 5.0f;        // Maximum distance for force calculation (increased from 3)
+static const float FORCE_FALLOFF_SCALE = 4.0f;       // Scale factor for force falloff (increased from 3)
+static const float GLOBAL_PRESSURE_DECAY = 0.998f;   // Decay factor for global pressure (increased from 0.995)
+static const float MIN_FORCE_THRESHOLD = 0.01f;      // Minimum force to apply to ensure all cells get some influence
+static const float VORTICITY_STRENGTH = 0.3f;        // Strength of vorticity confinement
+
+// Helper functions
+
+// Convert from Vector2 to ARGB format
+// A: -x (negative x component)
+// R: +x (positive x component)
+// G: -y (negative y component)
+// B: +y (positive y component)
+float4 Vector2ToARGB(float2 vec) {
+    return float4(
+        max(0, vec.x),   // R: +x (if positive)
+        max(0, -vec.y),  // G: -y (if negative)
+        max(0, vec.y),   // B: +y (if positive)
+        max(0, -vec.x)   // A: -x (if negative)
+    );
+}
+
+// Convert from ARGB to Vector2
+// x = R - A (+x - (-x))
+// y = B - G (+y - (-y))
+float2 ARGBToVector2(float4 color) {
+    return float2(
+        color.r - color.a,  // +x - (-x)
+        color.b - color.g   // +y - (-y)
+    );
+}
+
+// Check if a texel is within the field space (white)
+bool IsInFieldSpace(float2 uv) {
+    float4 color = InputTexture.SampleLevel(sampler_point_clamp, uv, 0);
+    return color.r > 0.5 && color.g > 0.5 && color.b > 0.5;
+}
+
+// Check if a texel is a sink (red)
+bool IsSink(float2 uv) {
+    float4 color = InputTexture.SampleLevel(sampler_point_clamp, uv, 0);
+    return color.r > 0.5 && color.g < 0.5 && color.b < 0.5;
+}
+
+// Check if a texel is a source (green)
+bool IsSource(float2 uv) {
+    float4 color = InputTexture.SampleLevel(sampler_point_clamp, uv, 0);
+    return color.r < 0.5 && color.g > 0.5 && color.b < 0.5;
+}
+
+// Check if velocity is effectively zero
+bool IsZeroVelocity(float2 vel) {
+    return length(vel) < 0.001f;
+}
+
+// Expanded offsets to include diagonals
+static const float2 expandedOffsets[8] = {
+    float2(1, 0),   // right
+    float2(-1, 0),  // left
+    float2(0, 1),   // up
+    float2(0, -1),  // down
+    float2(1, 1),   // up-right
+    float2(-1, 1),  // up-left
+    float2(1, -1),  // down-right
+    float2(-1, -1)  // down-left
+};
+
+// Bilinear sampling of velocity field
+float2 SampleVelocity(float2 uv) {
+    float2 pos = uv / TexelSize;
+    
+    int2 ipos = int2(floor(pos));
+    float2 fpos = pos - ipos;
+    
+    float4 v00 = Velocity[ipos];
+    float4 v10 = Velocity[ipos + int2(1, 0)];
+    float4 v01 = Velocity[ipos + int2(0, 1)];
+    float4 v11 = Velocity[ipos + int2(1, 1)];
+    
+    float2 vec00 = ARGBToVector2(v00);
+    float2 vec10 = ARGBToVector2(v10);
+    float2 vec01 = ARGBToVector2(v01);
+    float2 vec11 = ARGBToVector2(v11);
+    
+    float2 v0 = lerp(vec00, vec10, fpos.x);
+    float2 v1 = lerp(vec01, vec11, fpos.x);
+    return lerp(v0, v1, fpos.y);
+}
+
+// Kernels implementation
+
+// Setup the simulation based on the input texture
+[numthreads(8, 8, 1)]
+void SetupField(uint3 id : SV_DispatchThreadID) {
+    float2 uv = id.xy * TexelSize;
+    
+    Velocity[id.xy] = float4(0, 0, 0, 0); // Clear ARGB
+    
+    Pressure[id.xy] = 0;
+    GlobalPressure[id.xy] = 0;
+    
+    Divergence[id.xy] = 0;
+}
+
+// Generate boundary information texture (called once during initialization)
+[numthreads(8, 8, 1)]
+void GenerateBoundaryInfo(uint3 id : SV_DispatchThreadID) {
+    float2 uv = id.xy * TexelSize;
+    
+    if (!IsInFieldSpace(uv)) {
+        BoundaryInfo[id.xy] = 0;
+        return;
+    }
+    
+    float2 uvL = uv - float2(TexelSize.x, 0);
+    float2 uvR = uv + float2(TexelSize.x, 0);
+    float2 uvB = uv - float2(0, TexelSize.y);
+    float2 uvT = uv + float2(0, TexelSize.y);
+    
+    uint mask = 0;
+    mask |= IsInFieldSpace(uvL) ? 1u : 0u;
+    mask |= IsInFieldSpace(uvR) ? 2u : 0u;
+    mask |= IsInFieldSpace(uvB) ? 4u : 0u;
+    mask |= IsInFieldSpace(uvT) ? 8u : 0u;
+    
+    BoundaryInfo[id.xy] = mask;
+}
+
+// Advection step - move quantities along the velocity field
+[numthreads(8, 8, 1)]
+void Advect(uint3 id : SV_DispatchThreadID) {
+    float2 uv = id.xy * TexelSize;
+    
+    if (!IsInFieldSpace(uv)) {
+        VelocityTemp[id.xy] = float4(0, 0, 0, 0); // Clear ARGB
+        return;
+    }
+    
+    float2 vel = ARGBToVector2(Velocity[id.xy]);
+    float2 pos = uv - vel * DeltaTime;
+    
+    float2 sampledVel = SampleVelocity(pos);
+    VelocityTemp[id.xy] = Vector2ToARGB(sampledVel);
+}
+
+// Batched diffusion step - perform multiple iterations in a single dispatch
+[numthreads(8, 8, 1)]
+void DiffuseBatch(uint3 id : SV_DispatchThreadID) {
+    float2 uv = id.xy * TexelSize;
+    
+    if (!IsInFieldSpace(uv)) {
+        Velocity[id.xy] = float4(0, 0, 0, 0); // Clear ARGB
+        VelocityTemp[id.xy] = float4(0, 0, 0, 0); // Clear ARGB
+        return;
+    }
+    
+    float2 currentVelocity = ARGBToVector2(VelocityTemp[id.xy]);
+    float2 nextVelocity = currentVelocity;
+    
+    float alpha = TexelSize.x * TexelSize.y / (Viscosity * DeltaTime);
+    float beta = 1.0f / (DIFFUSION_CENTER_FACTOR + alpha);
+    
+    for (int iter = 0; iter < DiffusionBatchSize; iter++) {
+        currentVelocity = nextVelocity;
+        
+        float2 sum = float2(0, 0);
+        int count = 0;
+        
+        // Sample from 8 directions (cardinal + diagonal)
+        for (int i = 0; i < 8; i++) {
+            int2 nid = id.xy + expandedOffsets[i];
+            
+            // Ensure we're within bounds
+            if (nid.x < 0 || nid.x >= Resolution.x || nid.y < 0 || nid.y >= Resolution.y)
+                continue;
+                
+            float2 nuv = nid * TexelSize;
+            
+            // Weight diagonal samples less than cardinal directions
+            float weight = (i < 4) ? 1.0 : 0.7071; // 0.7071 ≈ 1/sqrt(2)
+            
+            if (IsInFieldSpace(nuv)) {
+                float2 neighborVel;
+                if (iter == 0) {
+                    neighborVel = ARGBToVector2(VelocityTemp[nid]);
+                } else {
+                    neighborVel = ARGBToVector2(Velocity[nid]);
+                }
+                sum += neighborVel * weight;
+                count += weight;
+            }
+            // Allow some diffusion from outside field space with reduced weight
+            else if (i < 4) { // Only consider cardinal directions for outside field
+                float2 outsideVel;
+                if (iter == 0) {
+                    outsideVel = ARGBToVector2(VelocityTemp[nid]);
+                } else {
+                    outsideVel = ARGBToVector2(Velocity[nid]);
+                }
+                if (!IsZeroVelocity(outsideVel)) {
+                    sum += outsideVel * 0.3; // Reduced weight for outside field
+                    count += 0.3;
+                }
+            }
+        }
+        
+        if (count >= 1.0) {
+            nextVelocity = (currentVelocity * alpha + sum) * (1.0 / (count + alpha));
+        }
+        else {
+            nextVelocity = currentVelocity * VELOCITY_DECAY;
+        }
+        
+        Velocity[id.xy] = Vector2ToARGB(nextVelocity);
+        
+        GroupMemoryBarrierWithGroupSync();
+    }
+}
+
+// Calculate divergence of the velocity field using pre-computed boundary information
+[numthreads(8, 8, 1)]
+void ComputeDivergence(uint3 id : SV_DispatchThreadID) {
+    uint boundaryMask = BoundaryInfo[id.xy];
+    
+    if (boundaryMask == 0) {
+        Divergence[id.xy] = 0;
+        return;
+    }
+    
+    int2 idL = max(int2(0, id.y), id.xy - int2(1, 0));
+    int2 idR = min(int2(Resolution.x-1, id.y), id.xy + int2(1, 0));
+    int2 idB = max(int2(id.x, 0), id.xy - int2(0, 1));
+    int2 idT = min(int2(id.x, Resolution.y-1), id.xy + int2(0, 1));
+    
+    float2 vL = ARGBToVector2(Velocity[idL]);
+    float2 vR = ARGBToVector2(Velocity[idR]);
+    float2 vB = ARGBToVector2(Velocity[idB]);
+    float2 vT = ARGBToVector2(Velocity[idT]);
+    
+    vL = (boundaryMask & 1u) ? vL : float2(0, 0);
+    vR = (boundaryMask & 2u) ? vR : float2(0, 0);
+    vB = (boundaryMask & 4u) ? vB : float2(0, 0);
+    vT = (boundaryMask & 8u) ? vT : float2(0, 0);
+    
+    float divX = 0.0;
+    float divY = 0.0;
+    
+    uint xNeighbors = (boundaryMask & 1u) + ((boundaryMask & 2u) >> 1);
+    uint yNeighbors = ((boundaryMask & 4u) >> 2) + ((boundaryMask & 8u) >> 3);
+    
+    if (xNeighbors > 0) {
+        divX = (vR.x - vL.x) / xNeighbors;
+    }
+    
+    if (yNeighbors > 0) {
+        divY = (vT.y - vB.y) / yNeighbors;
+    }
+    
+    float div = 0.5f * (divX + divY);
+    Divergence[id.xy] = div;
+}
+
+// Solve pressure equation using batched Jacobi iterations with pre-computed boundary information
+[numthreads(8, 8, 1)]
+void SolvePressureBatch(uint3 id : SV_DispatchThreadID) {
+    uint boundaryMask = BoundaryInfo[id.xy];
+    
+    if (boundaryMask == 0) {
+        Pressure[id.xy] = 0;
+        PressureTemp[id.xy] = 0;
+        return;
+    }
+    
+    float div = Divergence[id.xy];
+    
+    float currentP = Pressure[id.xy];
+    float nextP = currentP;
+    
+    bool readFromPressure = true;
+    
+    for (int iter = 0; iter < PressureBatchSize; iter++) {
+        currentP = nextP;
+        
+        float pL, pR, pB, pT;
+        
+        if (readFromPressure) {
+            pL = (boundaryMask & 1u) ? Pressure[id.xy - int2(1, 0)] : currentP;
+            pR = (boundaryMask & 2u) ? Pressure[id.xy + int2(1, 0)] : currentP;
+            pB = (boundaryMask & 4u) ? Pressure[id.xy - int2(0, 1)] : currentP;
+            pT = (boundaryMask & 8u) ? Pressure[id.xy + int2(0, 1)] : currentP;
+        } else {
+            pL = (boundaryMask & 1u) ? PressureTemp[id.xy - int2(1, 0)] : currentP;
+            pR = (boundaryMask & 2u) ? PressureTemp[id.xy + int2(1, 0)] : currentP;
+            pB = (boundaryMask & 4u) ? PressureTemp[id.xy - int2(0, 1)] : currentP;
+            pT = (boundaryMask & 8u) ? PressureTemp[id.xy + int2(0, 1)] : currentP;
+        }
+        
+        uint neighborCount = countbits(boundaryMask);
+        
+        if (neighborCount > 0) {
+            nextP = (pL + pR + pB + pT - div) / neighborCount;
+        } else {
+            nextP = currentP;
+        }
+        
+        if (readFromPressure) {
+            PressureTemp[id.xy] = nextP;
+        } else {
+            Pressure[id.xy] = nextP;
+        }
+        
+        GroupMemoryBarrierWithGroupSync();
+        
+        readFromPressure = !readFromPressure;
+    }
+    
+    if (readFromPressure) {
+        Pressure[id.xy] = PressureTemp[id.xy];
+    }
+}
+
+// Global pressure propagation - ensures pressure from sinks and sources affects the entire field
+[numthreads(8, 8, 1)]
+void PropagateGlobalPressure(uint3 id : SV_DispatchThreadID) {
+    float2 uv = id.xy * TexelSize;
+    
+    // First pass: Initialize global pressure from sinks and sources
+    if (IsSink(uv)) {
+        GlobalPressure[id.xy] = -1.0 * SinkStrength;
+        return;
+    }
+    
+    if (IsSource(uv)) {
+        GlobalPressure[id.xy] = 1.0 * SourceStrength;
+        return;
+    }
+    
+    // Allow propagation outside field space with reduced weight
+    bool inFieldSpace = IsInFieldSpace(uv);
+    if (!inFieldSpace) {
+        // Still allow some pressure outside field, but with higher decay
+        // This helps create a smoother transition at boundaries
+    }
+    
+    // Enhanced diffusion approach for global pressure
+    // This is a single iteration - the kernel will be called multiple times
+    float sum = 0;
+    float totalWeight = 0;
+    
+    // Sample from all neighbors (cardinal + diagonal)
+    for (int i = 0; i < 8; i++) {
+        int2 nid = id.xy + expandedOffsets[i];
+        
+        // Ensure we're within bounds
+        if (nid.x >= 0 && nid.x < Resolution.x && nid.y >= 0 && nid.y < Resolution.y) {
+            // Weight diagonal samples less than cardinal directions
+            float weight = (i < 4) ? 1.0 : 0.7071; // 0.7071 ≈ 1/sqrt(2)
+            
+            // Check if neighbor is a sink or source - give them higher weight
+            float2 nuv = nid * TexelSize;
+            if (IsSink(nuv) || IsSource(nuv)) {
+                weight *= 1.5; // Increase influence of sinks and sources
+            }
+            
+            sum += GlobalPressure[nid] * weight;
+            totalWeight += weight;
+        }
+    }
+    
+    // Update global pressure based on neighbors
+    if (totalWeight > 0) {
+        // Average of neighbors with slight decay
+        float decayFactor = inFieldSpace ? GLOBAL_PRESSURE_DECAY : GLOBAL_PRESSURE_DECAY * 0.95;
+        float newValue = (sum / totalWeight) * decayFactor;
+        
+        // Don't update sinks and sources
+        if (!IsSink(uv) && !IsSource(uv)) {
+            GlobalPressure[id.xy] = newValue;
+        }
+    }
+}
+
+// Project velocity to be divergence-free with pre-computed boundary information
+[numthreads(8, 8, 1)]
+void Project(uint3 id : SV_DispatchThreadID) {
+    float2 uv = id.xy * TexelSize;
+    
+    // Skip cells outside the field space
+    if (!IsInFieldSpace(uv)) {
+        return;
+    }
+    
+    // Get the local pressure
+    float centerP = Pressure[id.xy];
+    
+    // Get the global pressure and apply strength factor
+    float centerGP = GlobalPressure[id.xy] * GlobalPressureStrength;
+    
+    // Combine local and global pressure
+    float combinedP = centerP + centerGP;
+    
+    // Sample pressure from neighbors
+    float pL = 0, pR = 0, pB = 0, pT = 0;
+    int2 idL = id.xy - int2(1, 0);
+    int2 idR = id.xy + int2(1, 0);
+    int2 idB = id.xy - int2(0, 1);
+    int2 idT = id.xy + int2(0, 1);
+    
+    // Ensure neighbors are within bounds
+    bool hasL = idL.x >= 0 && IsInFieldSpace(idL * TexelSize);
+    bool hasR = idR.x < Resolution.x && IsInFieldSpace(idR * TexelSize);
+    bool hasB = idB.y >= 0 && IsInFieldSpace(idB * TexelSize);
+    bool hasT = idT.y < Resolution.y && IsInFieldSpace(idT * TexelSize);
+    
+    // Get pressure values from valid neighbors
+    if (hasL) pL = Pressure[idL] + GlobalPressure[idL] * GlobalPressureStrength;
+    else pL = combinedP;
+    
+    if (hasR) pR = Pressure[idR] + GlobalPressure[idR] * GlobalPressureStrength;
+    else pR = combinedP;
+    
+    if (hasB) pB = Pressure[idB] + GlobalPressure[idB] * GlobalPressureStrength;
+    else pB = combinedP;
+    
+    if (hasT) pT = Pressure[idT] + GlobalPressure[idT] * GlobalPressureStrength;
+    else pT = combinedP;
+    
+    // Calculate pressure gradient
+    float2 gradP = float2(0, 0);
+    int xNeighbors = hasL + hasR;
+    int yNeighbors = hasB + hasT;
+    
+    if (xNeighbors > 0) {
+        gradP.x = (pR - pL) / xNeighbors;
+    }
+    
+    if (yNeighbors > 0) {
+        gradP.y = (pT - pB) / yNeighbors;
+    }
+    
+    gradP *= 0.5f;
+    
+    // Apply pressure gradient to velocity
+    float2 vel = ARGBToVector2(Velocity[id.xy]);
+    vel -= gradP;
+    Velocity[id.xy] = Vector2ToARGB(vel);
+}
+
+// Apply sink and source forces
+[numthreads(8, 8, 1)]
+void ApplySinkSource(uint3 id : SV_DispatchThreadID) {
+    float2 uv = id.xy * TexelSize;
+    
+    if (!IsInFieldSpace(uv)) {
+        return;
+    }
+    
+    float2 force = float2(0, 0);
+    bool hasInfluence = false;
+    
+    for (int y = -FORCE_RADIUS; y <= FORCE_RADIUS; y++) {
+        for (int x = -FORCE_RADIUS; x <= FORCE_RADIUS; x++) {
+            if (x == 0 && y == 0) continue;
+            
+            int2 nid = id.xy + int2(x, y);
+            float2 nuv = nid * TexelSize;
+            
+            if (nuv.x < 0 || nuv.x > 1 || nuv.y < 0 || nuv.y > 1) continue;
+            
+            float2 dir = float2(x, y);
+            float dist = length(dir);
+            
+            if (dist > MAX_FORCE_DISTANCE) continue;
+            
+            dir = normalize(dir);
+            float falloff = 1.0f - saturate(dist / FORCE_FALLOFF_SCALE);
+            
+            // Add rotational component (perpendicular to radial direction)
+            float2 perpDir = float2(-dir.y, dir.x); // 90-degree rotation
+            float rotationFactor = 0.3; // Adjust strength as needed
+            
+            if (IsSink(nuv)) {
+                force -= dir * falloff * SinkStrength;
+                force += perpDir * falloff * SinkStrength * rotationFactor; // Add rotation
+                hasInfluence = true;
+            }
+            
+            if (IsSource(nuv)) {
+                force += dir * falloff * SourceStrength;
+                force += perpDir * falloff * SourceStrength * rotationFactor; // Add rotation
+                hasInfluence = true;
+            }
+        }
+    }
+    
+    // If no direct influence was found, add a minimum force based on global pressure gradient
+    if (!hasInfluence) {
+        // Sample global pressure from neighbors to create a minimum force
+        float gpL = GlobalPressure[id.xy - int2(1, 0)];
+        float gpR = GlobalPressure[id.xy + int2(1, 0)];
+        float gpB = GlobalPressure[id.xy - int2(0, 1)];
+        float gpT = GlobalPressure[id.xy + int2(0, 1)];
+        
+        float2 gradGP = float2(gpR - gpL, gpT - gpB) * 0.5f;
+        
+        // If gradient is significant, use it as a minimum force
+        if (length(gradGP) > 0.001f) {
+            float2 minForce = normalize(gradGP) * MIN_FORCE_THRESHOLD;
+            force += minForce;
+        }
+    }
+    
+    float2 vel = ARGBToVector2(Velocity[id.xy]);
+    vel += force * DeltaTime;
+    Velocity[id.xy] = Vector2ToARGB(vel);
+}
+
+// Extrapolate velocity from valid cells to invalid cells
+[numthreads(8, 8, 1)]
+void ExtrapolateVelocity(uint3 id : SV_DispatchThreadID)
+{
+    float2 uv = id.xy * TexelSize;
+    float2 currentVel = ARGBToVector2(Velocity[id.xy]);
+    
+    // Skip cells that are already in the field space with non-zero velocity
+    if (IsInFieldSpace(uv) && !IsZeroVelocity(currentVel))
+    {
+        return;
+    }
+    
+    // Find the nearest valid velocity
+    float2 nearestVelocity = float2(0, 0);
+    float minDistance = 1000000.0f; // Large initial value
+    bool foundValid = false;
+    
+    // Search radius (can be adjusted for performance/quality)
+    const int searchRadius = 7; // Increased from 5
+    
+    for (int y = -searchRadius; y <= searchRadius; y++)
+    {
+        for (int x = -searchRadius; x <= searchRadius; x++)
+        {
+            if (x == 0 && y == 0)
+                continue;
+            
+            int2 nid = id.xy + int2(x, y);
+            
+            // Skip if out of bounds
+            if (nid.x < 0 || nid.x >= Resolution.x || nid.y < 0 || nid.y >= Resolution.y)
+            {
+                continue;
+            }
+            
+            float2 nuv = nid * TexelSize;
+            float2 sampleVelocity = ARGBToVector2(Velocity[nid]);
+            
+            // Skip zero velocities
+            if (IsZeroVelocity(sampleVelocity))
+            {
+                continue;
+            }
+            
+            // Check if this is a valid field cell with non-zero velocity
+            if (IsInFieldSpace(nuv) || length(sampleVelocity) > 0.01f)
+            {
+                float dist = length(float2(x, y));
+                
+                // If this is closer than our current nearest, update
+                if (dist < minDistance)
+                {
+                    minDistance = dist;
+                    nearestVelocity = sampleVelocity;
+                    foundValid = true;
+                }
+            }
+        }
+    }
+    
+    // If we found a valid velocity, use it (with distance falloff)
+    if (foundValid)
+    {
+        // Apply distance-based falloff
+        float falloff = max(0.2f, 1.0f / (1.0f + minDistance * 0.3f));
+        
+        // If we're in field space, blend with existing velocity
+        if (IsInFieldSpace(uv))
+        {
+            float2 newVel = lerp(currentVel, nearestVelocity * falloff, 0.7f);
+            Velocity[id.xy] = Vector2ToARGB(newVel);
+        }
+        else
+        {
+            Velocity[id.xy] = Vector2ToARGB(nearestVelocity * falloff);
+        }
+    }
+    else
+    {
+        // If no valid velocity found, use global pressure gradient as a fallback
+        float2 gradGP = float2(0, 0);
+        
+        // Sample global pressure from neighbors (including diagonals)
+        float sum_x = 0, sum_y = 0;
+        float weight_x = 0, weight_y = 0;
+        
+        for (int i = 0; i < 8; i++)
+        {
+            int2 nid = id.xy + expandedOffsets[i];
+            
+            // Skip if out of bounds
+            if (nid.x < 0 || nid.x >= Resolution.x || nid.y < 0 || nid.y >= Resolution.y)
+            {
+                continue;
+            }
+            
+            float pressure = GlobalPressure[nid];
+            
+            // For x gradient, use horizontal neighbors
+            if (i == 0 || i == 1)
+            { // right or left
+                sum_x += pressure * sign(expandedOffsets[i].x);
+                weight_x += 1.0;
+            }
+            // For y gradient, use vertical neighbors
+            else if (i == 2 || i == 3)
+            { // up or down
+                sum_y += pressure * sign(expandedOffsets[i].y);
+                weight_y += 1.0;
+            }
+            // For diagonals, contribute to both with reduced weight
+            else
+            {
+                sum_x += pressure * sign(expandedOffsets[i].x) * 0.7071;
+                sum_y += pressure * sign(expandedOffsets[i].y) * 0.7071;
+                weight_x += 0.7071;
+                weight_y += 0.7071;
+            }
+        }
+        
+        // Calculate gradient
+        if (weight_x > 0)
+            gradGP.x = sum_x / weight_x;
+        if (weight_y > 0)
+            gradGP.y = sum_y / weight_y;
+        
+        // Convert global pressure gradient to velocity
+        // Negative gradient because we want to move from high to low pressure
+        float2 gradientVelocity = -gradGP * GlobalPressureStrength * 2.5f;
+        
+        // If we're in field space, blend with existing velocity
+        if (IsInFieldSpace(uv))
+        {
+            float2 currentVel = ARGBToVector2(Velocity[id.xy]);
+            Velocity[id.xy] = Vector2ToARGB(lerp(currentVel, gradientVelocity, 0.5f));
+        }
+        else
+        {
+            Velocity[id.xy] = Vector2ToARGB(gradientVelocity);
+        }
+    }
+}
+
+// Fill zero-velocity regions within the field
+[numthreads(8, 8, 1)]
+void FillZeroVelocity(uint3 id : SV_DispatchThreadID)
+{
+    float2 uv = id.xy * TexelSize;
+    
+    // Only process cells within the field space that have zero velocity
+    float2 currentVel = ARGBToVector2(Velocity[id.xy]);
+    if (!IsInFieldSpace(uv) || !IsZeroVelocity(currentVel))
+    {
+        return;
+    }
+    
+    // Find non-zero velocities in the vicinity
+    float2 avgVelocity = float2(0, 0);
+    float totalWeight = 0;
+    
+    // Search in a larger radius for non-zero velocities
+    const int searchRadius = 8;
+    
+    for (int y = -searchRadius; y <= searchRadius; y++)
+    {
+        for (int x = -searchRadius; x <= searchRadius; x++)
+        {
+            if (x == 0 && y == 0)
+                continue;
+            
+            int2 nid = id.xy + int2(x, y);
+            
+            // Skip if out of bounds
+            if (nid.x < 0 || nid.x >= Resolution.x || nid.y < 0 || nid.y >= Resolution.y)
+            {
+                continue;
+            }
+            
+            float2 nuv = nid * TexelSize;
+            float2 sampleVelocity = ARGBToVector2(Velocity[nid]);
+            
+            // Skip zero velocities
+            if (IsZeroVelocity(sampleVelocity))
+            {
+                continue;
+            }
+            
+            // Calculate distance-based weight
+            float dist = length(float2(x, y));
+            float weight = max(0.1f, 1.0f / (1.0f + dist * 0.5f));
+            
+            // Add to weighted average
+            avgVelocity += sampleVelocity * weight;
+            totalWeight += weight;
+        }
+    }
+    
+    // If we found non-zero velocities, use their weighted average
+    if (totalWeight > 0)
+    {
+        Velocity[id.xy] = Vector2ToARGB(avgVelocity / totalWeight);
+    }
+    else
+    {
+        // If no non-zero velocities found, use global pressure gradient
+        float2 gradGP = float2(0, 0);
+        
+        // Sample global pressure from neighbors
+        float gpL = GlobalPressure[id.xy - int2(1, 0)];
+        float gpR = GlobalPressure[id.xy + int2(1, 0)];
+        float gpB = GlobalPressure[id.xy - int2(0, 1)];
+        float gpT = GlobalPressure[id.xy + int2(0, 1)];
+        
+        // Calculate gradient
+        gradGP.x = (gpR - gpL) * 0.5f;
+        gradGP.y = (gpT - gpB) * 0.5f;
+        
+        // If gradient is significant, use it
+        if (length(gradGP) > 0.001f)
+        {
+            Velocity[id.xy] = Vector2ToARGB(-normalize(gradGP) * MIN_FORCE_THRESHOLD * 2.0f);
+        }
+        else
+        {
+            // Last resort: use a small random velocity
+            float angle = (id.x * 13 + id.y * 7) % 628 / 100.0f; // Pseudo-random angle
+            Velocity[id.xy] = Vector2ToARGB(float2(cos(angle), sin(angle)) * MIN_FORCE_THRESHOLD);
+        }
+    }
+}
+
+// Add vorticity confinement to enhance rotational flow
+[numthreads(8, 8, 1)]
+void AddVorticity(uint3 id : SV_DispatchThreadID)
+{
+    float2 uv = id.xy * TexelSize;
+    
+    // Skip cells outside the field space
+    if (!IsInFieldSpace(uv))
+    {
+        return;
+    }
+    
+    // Calculate curl (vorticity) at this cell
+    // For 2D, curl is a scalar (z component of curl in 3D)
+    float curl = 0;
+    
+    // Sample velocities from neighbors
+    float2 vL = ARGBToVector2(Velocity[max(int2(0, id.y), id.xy - int2(1, 0))]);
+    float2 vR = ARGBToVector2(Velocity[min(int2(Resolution.x - 1, id.y), id.xy + int2(1, 0))]);
+    float2 vB = ARGBToVector2(Velocity[max(int2(id.x, 0), id.xy - int2(0, 1))]);
+    float2 vT = ARGBToVector2(Velocity[min(int2(id.x, Resolution.y - 1), id.xy + int2(0, 1))]);
+    
+    // Calculate partial derivatives
+    float dvx_dy = (vT.x - vB.x) * 0.5f;
+    float dvy_dx = (vR.y - vL.y) * 0.5f;
+    
+    // Curl = dvx/dy - dvy/dx
+    curl = dvx_dy - dvy_dx;
+    
+    // Calculate gradient of curl magnitude
+    float cL = 0, cR = 0, cB = 0, cT = 0;
+    
+    // Sample curl at neighboring cells
+    int2 idL = max(int2(0, id.y), id.xy - int2(1, 0));
+    int2 idR = min(int2(Resolution.x - 1, id.y), id.xy + int2(1, 0));
+    int2 idB = max(int2(id.x, 0), id.xy - int2(0, 1));
+    int2 idT = min(int2(id.x, Resolution.y - 1), id.xy + int2(0, 1));
+    
+    // Calculate curl at each neighbor
+    float2 vLL = ARGBToVector2(Velocity[max(int2(0, idL.y), idL - int2(1, 0))]);
+    float2 vLR = ARGBToVector2(Velocity[min(int2(Resolution.x - 1, idL.y), idL + int2(1, 0))]);
+    float2 vLB = ARGBToVector2(Velocity[max(int2(idL.x, 0), idL - int2(0, 1))]);
+    float2 vLT = ARGBToVector2(Velocity[min(int2(idL.x, Resolution.y - 1), idL + int2(0, 1))]);
+    cL = ((vLT.x - vLB.x) * 0.5f) - ((vLR.y - vLL.y) * 0.5f);
+    
+    float2 vRL = ARGBToVector2(Velocity[max(int2(0, idR.y), idR - int2(1, 0))]);
+    float2 vRR = ARGBToVector2(Velocity[min(int2(Resolution.x - 1, idR.y), idR + int2(1, 0))]);
+    float2 vRB = ARGBToVector2(Velocity[max(int2(idR.x, 0), idR - int2(0, 1))]);
+    float2 vRT = ARGBToVector2(Velocity[min(int2(idR.x, Resolution.y - 1), idR + int2(0, 1))]);
+    cR = ((vRT.x - vRB.x) * 0.5f) - ((vRR.y - vRL.y) * 0.5f);
+    
+    float2 vBL = ARGBToVector2(Velocity[max(int2(0, idB.y), idB - int2(1, 0))]);
+    float2 vBR = ARGBToVector2(Velocity[min(int2(Resolution.x - 1, idB.y), idB + int2(1, 0))]);
+    float2 vBB = ARGBToVector2(Velocity[max(int2(idB.x, 0), idB - int2(0, 1))]);
+    float2 vBT = ARGBToVector2(Velocity[min(int2(idB.x, Resolution.y - 1), idB + int2(0, 1))]);
+    cB = ((vBT.x - vBB.x) * 0.5f) - ((vBR.y - vBL.y) * 0.5f);
+    
+    float2 vTL = ARGBToVector2(Velocity[max(int2(0, idT.y), idT - int2(1, 0))]);
+    float2 vTR = ARGBToVector2(Velocity[min(int2(Resolution.x - 1, idT.y), idT + int2(1, 0))]);
+    float2 vTB = ARGBToVector2(Velocity[max(int2(idT.x, 0), idT - int2(0, 1))]);
+    float2 vTT = ARGBToVector2(Velocity[min(int2(idT.x, Resolution.y - 1), idT + int2(0, 1))]);
+    cT = ((vTT.x - vTB.x) * 0.5f) - ((vTR.y - vTL.y) * 0.5f);
+    
+    // Calculate gradient of curl magnitude
+    float2 curlGrad = float2(abs(cR) - abs(cL), abs(cT) - abs(cB)) * 0.5f;
+    
+    // Normalize gradient
+    float curlGradMag = length(curlGrad);
+    if (curlGradMag > 0.001f)
+    {
+        curlGrad /= curlGradMag;
+    }
+    else
+    {
+        curlGrad = float2(0, 0);
+    }
+    
+    // Calculate vorticity force
+    // Force = epsilon * (curl_grad × curl_vector)
+    // In 2D, curl_vector is (0, 0, curl), so cross product is (curl_grad.y * curl, -curl_grad.x * curl)
+    float2 vorticityForce = float2(curlGrad.y, -curlGrad.x) * curl * VORTICITY_STRENGTH;
+    
+    // Apply vorticity force
+    float2 vel = ARGBToVector2(Velocity[id.xy]);
+    vel += vorticityForce * DeltaTime;
+    Velocity[id.xy] = Vector2ToARGB(vel);
+}
+
+// Sample a single point from the velocity field
+[numthreads(1, 1, 1)]
+void SamplePoint(uint3 id : SV_DispatchThreadID)
+{
+    // Use the existing SampleVelocity function to get the velocity at the specified position
+    float2 velocity = SampleVelocity(SamplePosition);
+    
+    // If velocity is zero, try to find a non-zero velocity nearby
+    if (length(velocity) < 0.001f)
+    {
+        float2 bestVelocity = float2(0, 0);
+        float bestMagnitude = 0.0f;
+        
+        // Search in a small radius for non-zero velocities
+        const float searchStep = 0.01f;
+        const int searchSteps = 5;
+        
+        for (int y = -searchSteps; y <= searchSteps; y++)
+        {
+            for (int x = -searchSteps; x <= searchSteps; x++)
+            {
+                if (x == 0 && y == 0)
+                    continue;
+                
+                float2 offset = float2(x, y) * searchStep;
+                float2 samplePos = SamplePosition + offset;
+                
+                // Ensure we're within bounds
+                if (samplePos.x < 0 || samplePos.x > 1 || samplePos.y < 0 || samplePos.y > 1)
+                {
+                    continue;
+                }
+                
+                float2 sampleVel = SampleVelocity(samplePos);
+                float magnitude = length(sampleVel);
+                
+                if (magnitude > bestMagnitude)
+                {
+                    bestMagnitude = magnitude;
+                    bestVelocity = sampleVel;
+                }
+            }
+        }
+        
+        // If we found a better velocity, use it
+        if (bestMagnitude > 0.001f)
+        {
+            velocity = bestVelocity;
+        }
+        else
+        {
+            // Last resort: use a small default velocity based on position
+            // This ensures agents always have some direction to follow
+            float2 dirToCenter = float2(0.5f, 0.5f) - SamplePosition;
+            float distToCenter = length(dirToCenter);
+            
+            if (distToCenter > 0.001f)
+            {
+                velocity = normalize(dirToCenter) * 0.1f;
+            }
+            else
+            {
+                // If we're at the center, use a small upward velocity
+                velocity = float2(0, 0.1f);
+            }
+        }
+    }
+    
+    // Store the result in the output buffer
+    SampleResult[0] = Vector2ToARGB(velocity);
+}
+

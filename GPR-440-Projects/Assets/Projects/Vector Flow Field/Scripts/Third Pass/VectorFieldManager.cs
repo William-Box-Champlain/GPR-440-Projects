@@ -86,7 +86,6 @@ public class VectorFieldManager : MonoBehaviour
     private int applySourcesAndSinksKernelId;
     private int visualizeVectorFieldKernelId;
 
-    private int frameCount = 0;
     private float accumulatedTime = 0.0f;
     
     void Start()

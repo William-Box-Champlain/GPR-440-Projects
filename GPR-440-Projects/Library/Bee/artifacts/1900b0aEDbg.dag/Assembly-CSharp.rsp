@@ -354,6 +354,8 @@
 -r:"Library/Bee/artifacts/1900b0aEDbg.dag/Unity.VSCode.Editor.ref.dll"
 -r:"Library/Bee/artifacts/1900b0aEDbg.dag/UnityEditor.UI.ref.dll"
 -r:"Library/Bee/artifacts/1900b0aEDbg.dag/UnityEngine.UI.ref.dll"
+-r:"Library/Bee/artifacts/1900b0aEDbg.dag/VFF.Editor.ref.dll"
+-r:"Library/Bee/artifacts/1900b0aEDbg.dag/VFF.ref.dll"
 -analyzer:"D:/Program Files/Unity/2022.3.8f1/Editor/Data/Tools/Unity.SourceGenerators/Unity.Properties.SourceGenerator.dll"
 -analyzer:"D:/Program Files/Unity/2022.3.8f1/Editor/Data/Tools/Unity.SourceGenerators/Unity.SourceGenerators.dll"
 "Assets/Projects/GOAP/Scripts/Action.cs"

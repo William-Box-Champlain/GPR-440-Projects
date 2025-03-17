@@ -1,0 +1,113 @@
+// MeshProcessor.compute
+// Compute shader for processing a mesh into a field texture for Vector Flow Field
+
+#pragma kernel CSMain
+
+// Input/Output
+RWTexture2D<float4> Result;
+StructuredBuffer<float2> triangles;
+uint numTriangles;
+float2 minBounds;
+float2 maxBounds;
+float2 textureSize;
+StructuredBuffer<float2> sinks;
+int numSinks;
+float sinkRadius;
+
+// Colors
+static const float4 FieldColor = float4(1, 1, 1, 1);    // White - Valid field space
+static const float4 ObstacleColor = float4(0, 0, 0, 1); // Black - Outside field space
+static const float4 SinkColor = float4(1, 0, 0, 1);     // Red - Sink (destination)
+static const float4 SourceColor = float4(0, 1, 0, 1);   // Green - Source (avoid)
+
+bool PointInTriangle(float2 p, float2 a, float2 b, float2 c)
+{
+    float2 v0 = c - a;
+    float2 v1 = b - a;
+    float2 v2 = p - a;
+
+    float dot00 = dot(v0, v0);
+    float dot01 = dot(v0, v1);
+    float dot02 = dot(v0, v2);
+    float dot11 = dot(v1, v1);
+    float dot12 = dot(v1, v2);
+
+    float invDenom = 1.0 / (dot00 * dot11 - dot01 * dot01);
+    float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+    float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+    return (u >= 0.0) && (v >= 0.0) && (u + v <= 1.0);
+}
+
+float DistanceToLineSegment(float2 p, float2 a, float2 b)
+{
+    float2 ab = b - a;
+    float2 ap = p - a;
+    
+    float t = clamp(dot(ap, ab) / dot(ab, ab), 0.0, 1.0);
+    float2 closest = a + t * ab;
+    
+    return distance(p, closest);
+}
+
+bool PointNearTriangleEdge(float2 p, float2 a, float2 b, float2 c, float maxDist)
+{
+    // Check distance to each edge
+    float dAB = DistanceToLineSegment(p, a, b);
+    float dBC = DistanceToLineSegment(p, b, c);
+    float dCA = DistanceToLineSegment(p, c, a);
+    
+    return min(min(dAB, dBC), dCA) <= maxDist;
+}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)textureSize.x || id.y >= (uint)textureSize.y)
+        return;
+
+    // Use pixel-centered UV calculation
+    float2 uv = float2((id.x + 0.5) / textureSize.x, (id.y + 0.5) / textureSize.y);
+    float2 worldPos = minBounds + uv * (maxBounds - minBounds);
+    
+    Result[id.xy] = ObstacleColor;
+    
+    // Calculate pixel size in world space for edge detection
+    float pixelSize = length(maxBounds - minBounds) / min(textureSize.x, textureSize.y);
+    
+    bool inside = false;
+    for (uint i = 0; i < numTriangles; i++)
+    {
+        uint tri = i * 3;
+        float2 a = triangles[tri];
+        float2 b = triangles[tri + 1];
+        float2 c = triangles[tri + 2];
+
+        // Check if point is inside triangle
+        if (PointInTriangle(worldPos, a, b, c))
+        {
+            inside = true;
+            break;
+        }
+        // If not inside, check if it's near an edge
+        else if (PointNearTriangleEdge(worldPos, a, b, c, pixelSize))
+        {
+            inside = true;
+            break;
+        }
+    }
+    
+    if (inside)
+    {
+        Result[id.xy] = FieldColor;
+    }
+    
+    for (int j = 0; j < numSinks; j++)
+    {
+        if (distance(worldPos, sinks[j]) < sinkRadius)
+        {
+            Result[id.xy] = SinkColor;
+            break;
+        }
+    }
+}

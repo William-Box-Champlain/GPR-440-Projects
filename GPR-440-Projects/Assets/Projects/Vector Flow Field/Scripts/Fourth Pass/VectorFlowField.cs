@@ -47,6 +47,8 @@ namespace VectorFlowField
             this.navMeshAdapter = new NavMeshAdapter(parameters.gridResolution, parameters.bounds, parameters.AdapterShader);
             this.simulator = new FluidSimulator();
             this.influenceManager = new SourceSinkManager(parameters.defaultSourceStrength, parameters.defaultSinkStrength);
+
+            simulator.SetSimulationParameters(parameters);
         }
 
         public void Update(float dt)
@@ -139,11 +141,14 @@ namespace VectorFlowField
         private bool shouldUpdateTexture;
         private ComputeShader shader;
 
+        private VFF.MeshTextureGenerator generator;
         public NavMeshAdapter(Vector2Int resolution, Bounds bounds, ComputeShader shader)
         {
             this.resolution = resolution;
             this.bounds = bounds;
             this.shader = shader;
+            generator = new VFF.MeshTextureGenerator(shader);
+            generator.SetTextureSize(resolution.x, resolution.y);
         }
 
         public Texture2D GenerateBoundaryTexture()
@@ -181,46 +186,53 @@ namespace VectorFlowField
 
         private bool GenerateTextureFromMesh(Mesh flattenedMesh, out Texture2D output)
         {
-            output = default;
+            //output = default;
 
-            ComputeBuffer vertexBuffer = new ComputeBuffer(flattenedMesh.vertices.Length, sizeof(float) * 3);
-            vertexBuffer.SetData(flattenedMesh.vertices);
+            //ComputeBuffer vertexBuffer = new ComputeBuffer(flattenedMesh.vertices.Length, sizeof(float) * 3);
+            //vertexBuffer.SetData(flattenedMesh.vertices);
 
-            ComputeBuffer triangleBuffer = new ComputeBuffer(flattenedMesh.triangles.Length, sizeof(int));
-            triangleBuffer.SetData(flattenedMesh.triangles);
+            //ComputeBuffer triangleBuffer = new ComputeBuffer(flattenedMesh.triangles.Length, sizeof(int));
+            //triangleBuffer.SetData(flattenedMesh.triangles);
 
-            RenderTexture computeTexture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.ARGB32);
-            computeTexture.enableRandomWrite = true;
-            computeTexture.Create();
+            //RenderTexture computeTexture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.ARGB32);
+            //computeTexture.enableRandomWrite = true;
+            //computeTexture.Create();
 
-            int kernel = shader.FindKernel("GenerateTexture");
+            //int kernel = shader.FindKernel("GenerateTexture");
 
-            shader.SetBuffer(kernel, "Verticies", vertexBuffer);
-            shader.SetBuffer(kernel, "Triangles", triangleBuffer);
-            shader.SetTexture(kernel, "Output", computeTexture);
-            shader.SetInt("VertexCount", flattenedMesh.vertices.Length);
-            shader.SetInt("TriangleCount", flattenedMesh.triangles.Length/3);
-            shader.SetInts("TextureSize", resolution.x, resolution.y);
-            shader.SetFloats("boundsMin", bounds.min.x, bounds.min.y);
-            shader.SetFloats("boundsMax", bounds.max.x, bounds.max.y);
+            //shader.SetBuffer(kernel, "Verticies", vertexBuffer);
+            //shader.SetBuffer(kernel, "Triangles", triangleBuffer);
+            //shader.SetTexture(kernel, "Output", computeTexture);
+            //shader.SetInt("VertexCount", flattenedMesh.vertices.Length);
+            //shader.SetInt("TriangleCount", flattenedMesh.triangles.Length/3);
+            //shader.SetInts("TextureSize", resolution.x, resolution.y);
+            //shader.SetFloats("boundsMin", bounds.min.x, bounds.min.y);
+            //shader.SetFloats("boundsMax", bounds.max.x, bounds.max.y);
 
-            int threadsX = (int)MathF.Ceiling(bounds.min.x / 8.0f);
-            int threadsY = (int)MathF.Ceiling(bounds.max.y / 8.0f);
-            shader.Dispatch(kernel,threadsX, threadsY,1);
+            //int threadsX = (int)Mathf.Abs(MathF.Ceiling(bounds.min.x / 8.0f));
+            //int threadsY = (int)Mathf.Abs(MathF.Ceiling(bounds.max.z / 8.0f));
+            //shader.Dispatch(kernel,threadsX, threadsY,1);
 
-            output = new Texture2D(resolution.x, resolution.y);
-            RenderTexture.active = computeTexture;
-            output.ReadPixels(new Rect(0, 0, resolution.x, resolution.y), 0, 0);
-            output.Apply();
-            RenderTexture.active = default;
+            //output = new Texture2D(resolution.x, resolution.y);
+            //RenderTexture.active = computeTexture;
+            //output.ReadPixels(new Rect(0, 0, resolution.x, resolution.y), 0, 0);
+            //output.Apply();
+            //RenderTexture.active = default;
 
-            vertexBuffer.Release();
-            triangleBuffer.Release();
-            computeTexture.Release();
+            //vertexBuffer.Release();
+            //triangleBuffer.Release();
+            //computeTexture.Release();
 
-            boundryTexture = output;
+            //boundryTexture = output;
 
+            //return true;
+            output = generator.GenerateTextureFromMesh(flattenedMesh);
             return true;
+        }
+
+        public Texture2D GetBoundaryTexture()
+        {
+            return boundryTexture;
         }
 
         public Vector2 WorldToGridPosition(Vector3 position)
@@ -248,7 +260,7 @@ namespace VectorFlowField
         private RenderTexture pressureTexturePrev;
         private RenderTexture divergenceTexture;
         private RenderTexture boundaryTexture;
-        private RenderTexture visualizationTexture;
+        public RenderTexture visualizationTexture;
         //kernels
         private int advectionKernelId;
         private int diffusionKernelId;
@@ -269,7 +281,6 @@ namespace VectorFlowField
         private float maxInfluenceIntensity;
         private float defaultSourceStrength;
         private float defaultSinkStrength;
-        private float defaultInfluenceRadius = 2.0f;
 
         // Struct to match the InfluencePoint structure in the shader
         private struct ShaderInfluencePoint
@@ -342,9 +353,9 @@ namespace VectorFlowField
                 diffusionKernelId = simulationShader.FindKernel("Diffusion");
                 divergenceKernelId = simulationShader.FindKernel("Divergence");
                 pressureSolveKernelId = simulationShader.FindKernel("PressureSolve");
-                pressureGradientKernelId = simulationShader.FindKernel("PressureGradient");
-                applyBoundariesKernelId = simulationShader.FindKernel("ApplyBoundaries");
-                applyInfluencesKernelId = simulationShader.FindKernel("ApplyInfluences");
+                pressureGradientKernelId = simulationShader.FindKernel("PressureDelta");
+                //applyBoundariesKernelId = simulationShader.FindKernel("ApplyBoundaries");
+                //applyInfluencesKernelId = simulationShader.FindKernel("ApplyInfluences");
                 visualizationKernelId = simulationShader.FindKernel("Visualization");
 
                 Debug.Log("Successfully found all compute shader kernels");
@@ -983,6 +994,11 @@ namespace VectorFlowField
         public class Builder
         {
             FlowFieldInfluence influence;
+
+            public Builder()
+            {
+                influence = new FlowFieldInfluence();
+            }
 
             public Builder WithID(GameObject id)
             {

@@ -24,8 +24,12 @@ public class VectorFlowFieldManager : MonoBehaviour
     [SerializeField] float ViscosityScalar;
     
     [Header("Sink and Source GameObjects")]
-    List<GameObject> SinkObjects = new List<GameObject>();
-    List<GameObject> SourceObjects = new List<GameObject>();
+    [SerializeField] List<GameObject> SinkObjects = new List<GameObject>();
+    [SerializeField] List<GameObject> SourceObjects = new List<GameObject>();
+
+    [Header("Debug material")]
+    [SerializeField] private Texture2D boundsTexture;
+    [SerializeField] private RenderTexture visualizationTexture;
 
     // Start is called before the first frame update
     void Start()
@@ -82,5 +86,14 @@ public class VectorFlowFieldManager : MonoBehaviour
     void Update()
     {
         fieldManager.Update(Time.deltaTime);
+
+        Debug.Log(fieldManager.simulator.SampleVelocityField(Vector3.zero));
+        Debug.Log(fieldManager.simulator.SampleVelocityField(new Vector3(12, 0, 12)));
+        Debug.Log(fieldManager.simulator.SampleVelocityField(new Vector3(12, 0, -12)));
+        Debug.Log(fieldManager.simulator.SampleVelocityField(new Vector3(-12, 0, 12)));
+        Debug.Log(fieldManager.simulator.SampleVelocityField(new Vector3(-12, 0, -12)));
+
+        this.boundsTexture = fieldManager.navMeshAdapter.GetBoundaryTexture();
+        this.visualizationTexture = fieldManager.simulator.GetVisualizationTexture();
     }
 }

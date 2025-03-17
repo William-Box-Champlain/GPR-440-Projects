@@ -273,7 +273,6 @@ GameObject:
   - component: {fileID: 675227696}
   - component: {fileID: 675227695}
   - component: {fileID: 675227694}
-  - component: {fileID: 675227693}
   m_Layer: 0
   m_Name: Sink (0)
   m_TagString: Untagged
@@ -281,18 +280,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &675227693
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 675227692}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f877e95851f880840bb91e8ba53d4a4c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!136 &675227694
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -410,7 +397,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 133db9afd694aef488910fe1697719ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  NavMeshAdapter: {fileID: 7200000, guid: c3e8518a2194e7244953c86f21670380, type: 3}
+  NavMeshAdapter: {fileID: 7200000, guid: bb78991dc64b0ce4dbcfa3868042e4cb, type: 3}
   SimulationCompute: {fileID: 7200000, guid: ea3599961ea452c4b8fd265568ebbd95, type: 3}
   MinBound: {fileID: 1386024025}
   MaxBound: {fileID: 1761720991}
@@ -421,6 +408,14 @@ MonoBehaviour:
   MaxInfluenceStrength: 20
   PressureScalar: 5
   ViscosityScalar: 5
+  SinkObjects:
+  - {fileID: 675227692}
+  - {fileID: 1168942325}
+  - {fileID: 738306123}
+  SourceObjects:
+  - {fileID: 1500936003}
+  boundsTexture: {fileID: 0}
+  visualizationTexture: {fileID: 0}
 --- !u!4 &677160950
 Transform:
   m_ObjectHideFlags: 0
@@ -448,7 +443,6 @@ GameObject:
   - component: {fileID: 738306127}
   - component: {fileID: 738306126}
   - component: {fileID: 738306125}
-  - component: {fileID: 738306124}
   m_Layer: 0
   m_Name: Sink (2)
   m_TagString: Untagged
@@ -456,18 +450,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &738306124
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 738306123}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f877e95851f880840bb91e8ba53d4a4c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!136 &738306125
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -754,7 +736,6 @@ GameObject:
   - component: {fileID: 1168942329}
   - component: {fileID: 1168942328}
   - component: {fileID: 1168942327}
-  - component: {fileID: 1168942326}
   m_Layer: 0
   m_Name: Sink (1)
   m_TagString: Untagged
@@ -762,18 +743,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1168942326
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1168942325}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f877e95851f880840bb91e8ba53d4a4c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!136 &1168942327
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -905,7 +874,6 @@ GameObject:
   - component: {fileID: 1500936007}
   - component: {fileID: 1500936006}
   - component: {fileID: 1500936005}
-  - component: {fileID: 1500936004}
   m_Layer: 0
   m_Name: Source (0)
   m_TagString: Untagged
@@ -913,18 +881,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1500936004
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1500936003}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9a934efd2f330b41be83fde59247f7c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!65 &1500936005
 BoxCollider:
   m_ObjectHideFlags: 0

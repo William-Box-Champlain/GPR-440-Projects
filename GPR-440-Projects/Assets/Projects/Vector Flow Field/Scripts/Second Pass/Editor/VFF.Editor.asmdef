@@ -1,0 +1,19 @@
+{
+    "name": "VFF.Editor",
+    "rootNamespace": "VFF.Editor",
+    "references": [
+        "GUID:e0cd26848372d4e5c891c569017e11f1",
+        "VFF"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

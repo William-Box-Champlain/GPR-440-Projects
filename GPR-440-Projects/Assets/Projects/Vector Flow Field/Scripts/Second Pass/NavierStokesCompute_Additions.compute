@@ -1,0 +1,220 @@
+// Fill zero-velocity regions within the field
+[numthreads(8, 8, 1)]
+void FillZeroVelocity(uint3 id : SV_DispatchThreadID) {
+    float2 uv = id.xy * TexelSize;
+    
+    // Only process cells within the field space that have zero velocity
+    float2 currentVel = ARGBToVector2(Velocity[id.xy]);
+    if (!IsInFieldSpace(uv) || !IsZeroVelocity(currentVel)) {
+        return;
+    }
+    
+    // Find non-zero velocities in the vicinity
+    float2 avgVelocity = float2(0, 0);
+    float totalWeight = 0;
+    
+    // Search in a larger radius for non-zero velocities
+    const int searchRadius = 8;
+    
+    for (int y = -searchRadius; y <= searchRadius; y++) {
+        for (int x = -searchRadius; x <= searchRadius; x++) {
+            if (x == 0 && y == 0) continue;
+            
+            int2 nid = id.xy + int2(x, y);
+            
+            // Skip if out of bounds
+            if (nid.x < 0 || nid.x >= Resolution.x || nid.y < 0 || nid.y >= Resolution.y) {
+                continue;
+            }
+            
+            float2 nuv = nid * TexelSize;
+            float2 sampleVelocity = ARGBToVector2(Velocity[nid]);
+            
+            // Skip zero velocities
+            if (IsZeroVelocity(sampleVelocity)) {
+                continue;
+            }
+            
+            // Calculate distance-based weight
+            float dist = length(float2(x, y));
+            float weight = max(0.1f, 1.0f / (1.0f + dist * 0.5f));
+            
+            // Add to weighted average
+            avgVelocity += sampleVelocity * weight;
+            totalWeight += weight;
+        }
+    }
+    
+    // If we found non-zero velocities, use their weighted average
+    if (totalWeight > 0) {
+        Velocity[id.xy] = Vector2ToARGB(avgVelocity / totalWeight);
+    }
+    else {
+        // If no non-zero velocities found, use global pressure gradient
+        float2 gradGP = float2(0, 0);
+        
+        // Sample global pressure from neighbors
+        float gpL = GlobalPressure[id.xy - int2(1, 0)];
+        float gpR = GlobalPressure[id.xy + int2(1, 0)];
+        float gpB = GlobalPressure[id.xy - int2(0, 1)];
+        float gpT = GlobalPressure[id.xy + int2(0, 1)];
+        
+        // Calculate gradient
+        gradGP.x = (gpR - gpL) * 0.5f;
+        gradGP.y = (gpT - gpB) * 0.5f;
+        
+        // If gradient is significant, use it
+        if (length(gradGP) > 0.001f) {
+            Velocity[id.xy] = Vector2ToARGB(-normalize(gradGP) * MIN_FORCE_THRESHOLD * 2.0f);
+        }
+        else {
+            // Last resort: use a small random velocity
+            float angle = (id.x * 13 + id.y * 7) % 628 / 100.0f; // Pseudo-random angle
+            Velocity[id.xy] = Vector2ToARGB(float2(cos(angle), sin(angle)) * MIN_FORCE_THRESHOLD);
+        }
+    }
+}
+
+// Add vorticity confinement to enhance rotational flow
+[numthreads(8, 8, 1)]
+void AddVorticity(uint3 id : SV_DispatchThreadID) {
+    float2 uv = id.xy * TexelSize;
+    
+    // Skip cells outside the field space
+    if (!IsInFieldSpace(uv)) {
+        return;
+    }
+    
+    // Calculate curl (vorticity) at this cell
+    // For 2D, curl is a scalar (z component of curl in 3D)
+    float curl = 0;
+    
+    // Sample velocities from neighbors
+    float2 vL = ARGBToVector2(Velocity[max(int2(0, id.y), id.xy - int2(1, 0))]);
+    float2 vR = ARGBToVector2(Velocity[min(int2(Resolution.x-1, id.y), id.xy + int2(1, 0))]);
+    float2 vB = ARGBToVector2(Velocity[max(int2(id.x, 0), id.xy - int2(0, 1))]);
+    float2 vT = ARGBToVector2(Velocity[min(int2(id.x, Resolution.y-1), id.xy + int2(0, 1))]);
+    
+    // Calculate partial derivatives
+    float dvx_dy = (vT.x - vB.x) * 0.5f;
+    float dvy_dx = (vR.y - vL.y) * 0.5f;
+    
+    // Curl = dvx/dy - dvy/dx
+    curl = dvx_dy - dvy_dx;
+    
+    // Calculate gradient of curl magnitude
+    float cL = 0, cR = 0, cB = 0, cT = 0;
+    
+    // Sample curl at neighboring cells
+    int2 idL = max(int2(0, id.y), id.xy - int2(1, 0));
+    int2 idR = min(int2(Resolution.x-1, id.y), id.xy + int2(1, 0));
+    int2 idB = max(int2(id.x, 0), id.xy - int2(0, 1));
+    int2 idT = min(int2(id.x, Resolution.y-1), id.xy + int2(0, 1));
+    
+    // Calculate curl at each neighbor
+    float2 vLL = ARGBToVector2(Velocity[max(int2(0, idL.y), idL - int2(1, 0))]);
+    float2 vLR = ARGBToVector2(Velocity[min(int2(Resolution.x-1, idL.y), idL + int2(1, 0))]);
+    float2 vLB = ARGBToVector2(Velocity[max(int2(idL.x, 0), idL - int2(0, 1))]);
+    float2 vLT = ARGBToVector2(Velocity[min(int2(idL.x, Resolution.y-1), idL + int2(0, 1))]);
+    cL = ((vLT.x - vLB.x) * 0.5f) - ((vLR.y - vLL.y) * 0.5f);
+    
+    float2 vRL = ARGBToVector2(Velocity[max(int2(0, idR.y), idR - int2(1, 0))]);
+    float2 vRR = ARGBToVector2(Velocity[min(int2(Resolution.x-1, idR.y), idR + int2(1, 0))]);
+    float2 vRB = ARGBToVector2(Velocity[max(int2(idR.x, 0), idR - int2(0, 1))]);
+    float2 vRT = ARGBToVector2(Velocity[min(int2(idR.x, Resolution.y-1), idR + int2(0, 1))]);
+    cR = ((vRT.x - vRB.x) * 0.5f) - ((vRR.y - vRL.y) * 0.5f);
+    
+    float2 vBL = ARGBToVector2(Velocity[max(int2(0, idB.y), idB - int2(1, 0))]);
+    float2 vBR = ARGBToVector2(Velocity[min(int2(Resolution.x-1, idB.y), idB + int2(1, 0))]);
+    float2 vBB = ARGBToVector2(Velocity[max(int2(idB.x, 0), idB - int2(0, 1))]);
+    float2 vBT = ARGBToVector2(Velocity[min(int2(idB.x, Resolution.y-1), idB + int2(0, 1))]);
+    cB = ((vBT.x - vBB.x) * 0.5f) - ((vBR.y - vBL.y) * 0.5f);
+    
+    float2 vTL = ARGBToVector2(Velocity[max(int2(0, idT.y), idT - int2(1, 0))]);
+    float2 vTR = ARGBToVector2(Velocity[min(int2(Resolution.x-1, idT.y), idT + int2(1, 0))]);
+    float2 vTB = ARGBToVector2(Velocity[max(int2(idT.x, 0), idT - int2(0, 1))]);
+    float2 vTT = ARGBToVector2(Velocity[min(int2(idT.x, Resolution.y-1), idT + int2(0, 1))]);
+    cT = ((vTT.x - vTB.x) * 0.5f) - ((vTR.y - vTL.y) * 0.5f);
+    
+    // Calculate gradient of curl magnitude
+    float2 curlGrad = float2(abs(cR) - abs(cL), abs(cT) - abs(cB)) * 0.5f;
+    
+    // Normalize gradient
+    float curlGradMag = length(curlGrad);
+    if (curlGradMag > 0.001f) {
+        curlGrad /= curlGradMag;
+    } else {
+        curlGrad = float2(0, 0);
+    }
+    
+    // Calculate vorticity force
+    // Force = epsilon * (curl_grad × curl_vector)
+    // In 2D, curl_vector is (0, 0, curl), so cross product is (curl_grad.y * curl, -curl_grad.x * curl)
+    float2 vorticityForce = float2(curlGrad.y, -curlGrad.x) * curl * VORTICITY_STRENGTH;
+    
+    // Apply vorticity force
+    float2 vel = ARGBToVector2(Velocity[id.xy]);
+    vel += vorticityForce * DeltaTime;
+    Velocity[id.xy] = Vector2ToARGB(vel);
+}
+
+// Sample a single point from the velocity field
+[numthreads(1, 1, 1)]
+void SamplePoint(uint3 id : SV_DispatchThreadID) {
+    // Use the existing SampleVelocity function to get the velocity at the specified position
+    float2 velocity = SampleVelocity(SamplePosition);
+    
+    // If velocity is zero, try to find a non-zero velocity nearby
+    if (length(velocity) < 0.001f) {
+        float2 bestVelocity = float2(0, 0);
+        float bestMagnitude = 0.0f;
+        
+        // Search in a small radius for non-zero velocities
+        const float searchStep = 0.01f;
+        const int searchSteps = 5;
+        
+        for (int y = -searchSteps; y <= searchSteps; y++) {
+            for (int x = -searchSteps; x <= searchSteps; x++) {
+                if (x == 0 && y == 0) continue;
+                
+                float2 offset = float2(x, y) * searchStep;
+                float2 samplePos = SamplePosition + offset;
+                
+                // Ensure we're within bounds
+                if (samplePos.x < 0 || samplePos.x > 1 || samplePos.y < 0 || samplePos.y > 1) {
+                    continue;
+                }
+                
+                float2 sampleVel = SampleVelocity(samplePos);
+                float magnitude = length(sampleVel);
+                
+                if (magnitude > bestMagnitude) {
+                    bestMagnitude = magnitude;
+                    bestVelocity = sampleVel;
+                }
+            }
+        }
+        
+        // If we found a better velocity, use it
+        if (bestMagnitude > 0.001f) {
+            velocity = bestVelocity;
+        }
+        else {
+            // Last resort: use a small default velocity based on position
+            // This ensures agents always have some direction to follow
+            float2 dirToCenter = float2(0.5f, 0.5f) - SamplePosition;
+            float distToCenter = length(dirToCenter);
+            
+            if (distToCenter > 0.001f) {
+                velocity = normalize(dirToCenter) * 0.1f;
+            }
+            else {
+                // If we're at the center, use a small upward velocity
+                velocity = float2(0, 0.1f);
+            }
+        }
+    }
+    
+    // Store the result in the output buffer
+    SampleResult[0] = Vector2ToARGB(velocity);
+}
