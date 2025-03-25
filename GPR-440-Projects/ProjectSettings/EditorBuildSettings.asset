@@ -4,5 +4,8 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Projects/Vector Flow Field/Second_Pass_Scene.unity
+    guid: e0ac5a41a584ba5459f01e25c5ed7053
   m_configObjects: {}

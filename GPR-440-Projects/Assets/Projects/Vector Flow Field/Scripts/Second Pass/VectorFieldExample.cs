@@ -13,7 +13,7 @@ namespace VFF
     {
         [Header("Vector Field Setup")]
         [Tooltip("Reference to the VectorFieldManager component")]
-        [SerializeField] private VectorFieldManager vectorFieldManager;
+        [SerializeField] private SecondPassVectorFieldManager vectorFieldManager;
 
         [Tooltip("Prefab for the agent")]
         [SerializeField] private GameObject agentPrefab;
@@ -40,7 +40,7 @@ namespace VFF
 
         // List of spawned agents
         private List<PathfindingAgent> agents = new List<PathfindingAgent>();
-        
+
         // Visualizer component
         private VFF.VectorFieldVisualizer visualizer;
 
@@ -58,7 +58,7 @@ namespace VFF
             SetupField();
 
             SpawnAgents();
-            
+
             // Create visualizer
             SetupVisualizer();
         }
@@ -152,7 +152,7 @@ namespace VFF
 
             Vector3 spawnCenter = transform.position;
             spawnCenter.x -= fieldSize.x / 3f;
-            
+
             for (int i = 0; i < agentCount; i++)
             {
                 float x = Random.Range(spawnCenter.x - spawnAreaSize.x / 2f, spawnCenter.x + spawnAreaSize.x / 2f);
@@ -197,7 +197,7 @@ namespace VFF
             if (Input.GetKeyDown(KeyCode.C))
             {
                 vectorFieldManager.ClearSinksAndSources(true);
-                
+
                 float sinkX = transform.position.x + fieldSize.x / 3f;
                 float sinkZ = transform.position.z;
                 vectorFieldManager.AddSink(new Vector3(sinkX, 0f, sinkZ), 0.05f, true);
@@ -219,11 +219,11 @@ namespace VFF
             {
                 visualizer = gameObject.AddComponent<VectorFieldVisualizer>();
             }
-            
+
             // Configure the visualizer            
             Debug.Log("Vector field visualizer set up. Use the inspector to toggle visualization modes.");
         }
-        
+
         /// <summary>
         /// Cleans up when the object is destroyed.
         /// </summary>

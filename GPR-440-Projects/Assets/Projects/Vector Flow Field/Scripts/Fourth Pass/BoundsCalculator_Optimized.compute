@@ -1,0 +1,151 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel GenerateTexture
+
+//Input data
+StructuredBuffer<float3> Verticies;
+StructuredBuffer<int> Triangles;
+
+//Output data
+RWTexture2D<float4> Output;
+
+//Params
+int VertexCount;
+int TriangleCount;
+int2 TextureSize;
+float2 boundsMin;
+float2 boundsMax;
+
+//Constants
+static float4 CELL = float4(0, 0, 0, 1);
+static float4 BOUNDARY = float4(0, 0, 1, 0);
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+
+float2 UVToWorldPos(uint2 id)
+{
+    float2 uv = float2(id.x / (float) (TextureSize.x - 1), id.y / (float) (TextureSize.y - 1));
+    return float2(lerp(boundsMin.x, boundsMax.x, uv.x), lerp(boundsMin.y, boundsMax.y, uv.y));
+}
+
+//Calculates the barycentric coordinate of point p relative to the triangle a-b-c
+// Returns 1.0 if inside, 0.0 if outside
+float PointInTriangleMask(float2 p, float2 a, float2 b, float2 c)
+{
+    float2 v0 = c - a;
+    float2 v1 = b - a;
+    float2 v2 = p - a;
+    
+    float dot00 = dot(v0, v0);
+    float dot01 = dot(v0, v1);
+    float dot02 = dot(v0, v2);
+    float dot11 = dot(v1, v1);
+    float dot12 = dot(v1, v2);
+    
+    float invDenom = 1.0 / (dot00 * dot11 - dot01 * dot01);
+    float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+    float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+    
+    // Return 1.0 if inside, 0.0 if outside - using step function to avoid branching
+    return step(0.0, u) * step(0.0, v) * step(u + v, 1.0);
+}
+
+// Calculate distance from point p to line segment (a,b)
+float DistanceToLineSegment(float2 p, float2 a, float2 b)
+{
+    float2 ab = b - a;
+    float2 ap = p - a;
+    
+    float t = clamp(dot(ap, ab) / max(dot(ab, ab), 0.0001), 0.0, 1.0);
+    float2 closest = a + t * ab;
+    
+    return distance(p, closest);
+}
+
+// Check if a point is near any edge of a triangle, returning 1.0 if near, 0.0 if not
+float PointNearTriangleEdgeMask(float2 p, float2 a, float2 b, float2 c, float maxDist)
+{
+    // Calculate distances to each edge
+    float dAB = DistanceToLineSegment(p, a, b);
+    float dBC = DistanceToLineSegment(p, b, c);
+    float dCA = DistanceToLineSegment(p, c, a);
+    
+    // Find minimum distance
+    float minDist = min(min(dAB, dBC), dCA);
+    
+    // Return 1.0 if near edge, 0.0 if not
+    return step(minDist, maxDist);
+}
+
+// Calculate edge crossing contribution for ray casting
+float EdgeCrossingMask(float2 position, float2 a, float2 b)
+{
+    // Check if the edge crosses a ray from the point extending in +X direction
+    float yDiffSign = sign((a.y > position.y) - (b.y > position.y));
+    
+    // Only consider edges that cross the horizontal ray
+    float crossesMask = step(0.001, abs(yDiffSign));
+    
+    // Calculate X intersection
+    float xIntersect = (b.x - a.x) * (position.y - a.y) / max(b.y - a.y, 0.0001) + a.x;
+    
+    // Check if intersection is to the right of position
+    float isRightMask = step(position.x, xIntersect);
+    
+    // If edge crosses ray to the right, count as a crossing
+    return crossesMask * isRightMask * abs(yDiffSign) * 0.5;
+}
+
+// Branch-free implementation using masking techniques
+[numthreads(8,8,1)]
+void GenerateTexture(uint3 id : SV_DispatchThreadID)
+{
+    // Early exit for out-of-bounds threads
+    if (id.x >= (uint)TextureSize.x || id.y >= (uint)TextureSize.y)
+        return;
+    
+    float2 position = UVToWorldPos(id.xy);
+    
+    // Pixel size for edge detection
+    float pixelSize = length(boundsMax - boundsMin) / min(TextureSize.x, TextureSize.y);
+    float edgeThreshold = pixelSize * 1.5;
+    
+    // Accumulators for our three tests
+    float inAnyTriangle = 0.0;
+    float nearAnyEdge = 0.0;
+    float crossingCount = 0.0;
+    
+    // Process all triangles
+    for (int i = 0; i < TriangleCount; i++)
+    {
+        int index = i * 3;
+        
+        float2 a = float2(Verticies[Triangles[index + 0]].x, Verticies[Triangles[index + 0]].z);
+        float2 b = float2(Verticies[Triangles[index + 1]].x, Verticies[Triangles[index + 1]].z);
+        float2 c = float2(Verticies[Triangles[index + 2]].x, Verticies[Triangles[index + 2]].z);
+        
+        // 1. Check if inside triangle (mask returns 1.0 if inside)
+        inAnyTriangle = max(inAnyTriangle, PointInTriangleMask(position, a, b, c));
+        
+        // 2. Check if near edge (mask returns 1.0 if near)
+        nearAnyEdge = max(nearAnyEdge, PointNearTriangleEdgeMask(position, a, b, c, edgeThreshold));
+        
+        // 3. Count edge crossings for ray casting (even-odd rule)
+        crossingCount += EdgeCrossingMask(position, a, b);
+        crossingCount += EdgeCrossingMask(position, b, c);
+        crossingCount += EdgeCrossingMask(position, c, a);
+    }
+    
+    // Check if number of crossings is odd using direct modulo
+    float oddCrossings = crossingCount % 2;
+    
+    // Combine results - if any test passes, point is in mesh
+    float inMeshMask = min(1.0, inAnyTriangle + nearAnyEdge + oddCrossings);
+    
+    // Set output based on combined result
+    float4 cellColor = CELL;    // Outside field
+    float4 boundaryColor = BOUNDARY; // Inside field
+    
+    // Use lerp with mask to avoid branch
+    Output[id.xy] = lerp(BOUNDARY, CELL, inMeshMask);
+}

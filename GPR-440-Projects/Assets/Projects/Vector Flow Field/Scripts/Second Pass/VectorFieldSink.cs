@@ -13,18 +13,18 @@ namespace VFF
 
         [Range(-0.01f, -5.0f)]
         public float strength = 1.0f;
-        
+
         [Tooltip("Whether this sink is active")]
         public bool isActive = true;
-        
+
         // Reference to the manager (set when registered)
-        private VectorFieldManager manager;
+        private SecondPassVectorFieldManager manager;
 
         private void Start()
         {
-            if (VectorFieldManager.Instance != null)
+            if (SecondPassVectorFieldManager.GetInstance() != null)
             {
-                VectorFieldManager.Instance.RegisterSink(this);
+                SecondPassVectorFieldManager.GetInstance().RegisterSink(this);
             }
         }
 
@@ -38,16 +38,16 @@ namespace VFF
                 manager.UnregisterSink(this);
             }
         }
-        
+
         /// <summary>
         /// Sets the manager reference.
         /// </summary>
         /// <param name="manager">The VectorFieldManager to associate with this sink.</param>
-        public void SetManager(VectorFieldManager manager)
+        public void SetManager(SecondPassVectorFieldManager manager)
         {
             this.manager = manager;
         }
-        
+
         /// <summary>
         /// Sets the active state of this sink.
         /// </summary>

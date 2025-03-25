@@ -50,7 +50,7 @@ namespace VFF
 
         // References
         private Rigidbody rb;
-        private VectorFieldManager vectorFieldManager;
+        private SecondPassVectorFieldManager vectorFieldManager;
 
         // Movement state
         private Vector3 currentVelocity;
@@ -69,23 +69,23 @@ namespace VFF
         {
             rb = GetComponent<Rigidbody>();
             rb.constraints = RigidbodyConstraints.FreezeRotation | RigidbodyConstraints.FreezePositionY;
-            
+
             // Auto-register with the manager if it exists
-            if (VectorFieldManager.Instance != null)
+            if (SecondPassVectorFieldManager.GetInstance() != null)
             {
-                VectorFieldManager.Instance.RegisterAgent(this);
+                SecondPassVectorFieldManager.GetInstance().RegisterAgent(this);
             }
         }
-        
+
         /// <summary>
         /// Auto-unregisters from the VectorFieldManager singleton on destroy.
         /// </summary>
         private void OnDestroy()
         {
             // Auto-unregister when destroyed
-            if (VectorFieldManager.Instance != null && vectorFieldManager == VectorFieldManager.Instance)
+            if (SecondPassVectorFieldManager.GetInstance() != null && vectorFieldManager == SecondPassVectorFieldManager.GetInstance())
             {
-                VectorFieldManager.Instance.UnregisterAgent(this);
+                SecondPassVectorFieldManager.GetInstance().UnregisterAgent(this);
             }
         }
 
@@ -93,7 +93,7 @@ namespace VFF
         /// Sets up the agent with a reference to the vector field manager.
         /// </summary>
         /// <param name="manager">The vector field manager to use for navigation.</param>
-        public void SetVectorFieldManager(VectorFieldManager manager)
+        public void SetVectorFieldManager(SecondPassVectorFieldManager manager)
         {
             vectorFieldManager = manager;
         }
@@ -103,7 +103,7 @@ namespace VFF
         /// </summary>
         private void FixedUpdate()
         {
-            VectorFieldManager manager = vectorFieldManager != null ? vectorFieldManager : VectorFieldManager.Instance;
+            SecondPassVectorFieldManager manager = vectorFieldManager != null ? vectorFieldManager : SecondPassVectorFieldManager.GetInstance();
 
             if (manager == null)
                 return;
@@ -113,7 +113,7 @@ namespace VFF
 
             direction = fieldDirection.normalized;
 
-            Debug.Log("FieldDirection: " +  fieldDirection);
+            Debug.Log("FieldDirection: " + fieldDirection);
         }
 
         /// <summary>

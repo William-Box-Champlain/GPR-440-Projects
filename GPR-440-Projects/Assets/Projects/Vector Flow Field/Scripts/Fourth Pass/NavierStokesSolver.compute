@@ -1,0 +1,335 @@
+#pragma kernel Advection;
+#pragma kernel Diffusion;
+#pragma kernel ApplyForces;
+#pragma kernel Divergence;
+#pragma kernel PressureDelta;
+#pragma kernel PressureSolve;
+#pragma kernel Visualization;
+#pragma enable_d3d11_debug_symbols
+
+//buffers
+RWTexture2D<float4> VelocityTexture;
+RWTexture2D<float4> VelocityTexturePrev;
+RWTexture2D<float> PressureTexture;
+RWTexture2D<float> PressureTexturePrev;
+RWTexture2D<float> DivergenceTexture;
+RWTexture2D<float4> BoundaryTexture;
+RWTexture2D<float4> VisualizationTexture;
+RWTexture2D<float4> BoundaryAndInfluenceTexture;
+
+//parameters
+float maxVelocity;
+float maxSinkSourceStrength;
+float deltaTime;
+float2 resolution;
+float4 bounds;
+float viscosityCoeff;
+float pressureCoeff;
+float pressureScalar;
+int iterationCount;
+float2 inverseResolution; //calculated as resolution / bounds.xy 
+
+//constants
+static float4 CELL      = float4(0, 0, 0, 1);
+static float4 BOUNDARY  = float4(0, 0, 1, 0);
+static float4 SOURCE    = float4(0, 1, 0, 0);
+static float4 SINK      = float4(1, 0, 0, 0);
+static float EPSILON = 0.01;
+static float THRESHOLD = 0.01;
+static float DISSIPATION = 0.8;
+
+//Helper functions
+
+//bool helpers
+bool IsCell(int2 cell)
+{
+    return BoundaryTexture[cell].a > THRESHOLD && //opaque??
+           BoundaryTexture[cell].b < THRESHOLD;
+}
+
+bool IsBoundary(int2 cell)
+{
+    return BoundaryTexture[cell].a < THRESHOLD &&
+           BoundaryTexture[cell].b > THRESHOLD;   //blue
+}
+
+bool IsSource(int2 cell)
+{
+    return BoundaryTexture[cell].r < THRESHOLD &&
+           BoundaryTexture[cell].g > THRESHOLD && //green
+           BoundaryTexture[cell].b < THRESHOLD;
+}
+
+bool IsSink(int2 cell)
+{
+    return BoundaryTexture[cell].r > THRESHOLD && //red is big
+           BoundaryTexture[cell].g < THRESHOLD &&
+           BoundaryTexture[cell].b < THRESHOLD;
+}
+
+bool WithinAbsoluteBounds(uint2 id)
+{
+    return (id.x <= (uint) resolution.x || id.y <= (uint) resolution.y);
+}
+
+//masking helpers
+float GetCellMask(int2 cell)
+{
+    return step(THRESHOLD, BoundaryTexture[cell].a);
+}
+
+float GetBoundaryMask(int2 cell)
+{
+    // Returns 1.0 if cell is a boundary, 0.0 otherwise
+    return step(THRESHOLD, BoundaryTexture[cell].b);
+}
+
+float GetSourceMask(int2 cell)
+{
+    // Returns normalized strength of source
+    return BoundaryTexture[cell].g;
+}
+
+float GetSinkMask(int2 cell)
+{
+    // Returns normalized strength of sink
+    return BoundaryTexture[cell].r;
+
+}
+
+//pressure helpers
+float GetCellPressure(int2 cell)
+{
+    return BoundaryTexture[cell].g * maxSinkSourceStrength - BoundaryTexture[cell].r * maxSinkSourceStrength;
+}
+
+// Keep your existing helper functions as they are since they're well-structured
+
+[numthreads(8, 8, 1)]
+void Advection(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    // Only advect fluid cells, not boundaries
+    if (IsCell(id.xy))
+    {
+        float2 uv = (id.xy + 0.5) / resolution;
+        float2 velocity = VelocityTexturePrev[id.xy].xy;
+        float2 pos = uv - deltaTime * velocity;
+
+        // Sample the velocity at the back-traced position
+        uint2 texPos = uint2(pos * resolution);
+
+        // Only use valid positions
+        if (WithinAbsoluteBounds(texPos) && IsCell(texPos))
+        {
+            VelocityTexture[id.xy] = float4(DISSIPATION * VelocityTexturePrev[texPos].xy, 0, 0);
+        }
+        else
+        {
+            // Maintain current velocity for invalid positions
+            VelocityTexture[id.xy] = float4(DISSIPATION * velocity, 0, 0);
+        }
+    }
+    else
+    {
+        // For boundary cells, sources, and sinks, maintain zero velocity
+        VelocityTexture[id.xy] = float4(0, 0, 0, 0);
+    }
+}
+
+[numthreads(8, 8, 1)]
+void Diffusion(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    if (IsCell(id.xy))
+    {
+        // Get neighboring velocities, accounting for boundaries
+        float2 vC = VelocityTexturePrev[id.xy].xy;
+
+        float2 vL = IsCell(id.xy - int2(1, 0)) ? VelocityTexturePrev[id.xy - int2(1, 0)].xy : vC;
+        float2 vR = IsCell(id.xy + int2(1, 0)) ? VelocityTexturePrev[id.xy + int2(1, 0)].xy : vC;
+        float2 vB = IsCell(id.xy - int2(0, 1)) ? VelocityTexturePrev[id.xy - int2(0, 1)].xy : vC;
+        float2 vT = IsCell(id.xy + int2(0, 1)) ? VelocityTexturePrev[id.xy + int2(0, 1)].xy : vC;
+
+        // Calculate viscous diffusion using Jacobi iteration
+        float alpha = viscosityCoeff * deltaTime * inverseResolution.x * inverseResolution.y;
+        float rBeta = 1.0 / (1.0 + 4.0 * alpha);
+
+        VelocityTexture[id.xy] = float4((vL + vR + vB + vT + vC * (1.0 / alpha)) * (alpha * rBeta), 0, 0);
+    }
+}
+
+[numthreads(8, 8, 1)]
+void Divergence(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    if (IsCell(id.xy))
+    {
+        // Get neighboring velocities, properly handling boundaries
+        float2 vC = VelocityTexture[id.xy].xy;
+
+        float2 vL = IsCell(id.xy - int2(1, 0)) ? VelocityTexture[id.xy - int2(1, 0)].xy : -vC;
+        float2 vR = IsCell(id.xy + int2(1, 0)) ? VelocityTexture[id.xy + int2(1, 0)].xy : -vC;
+        float2 vB = IsCell(id.xy - int2(0, 1)) ? VelocityTexture[id.xy - int2(0, 1)].xy : -vC;
+        float2 vT = IsCell(id.xy + int2(0, 1)) ? VelocityTexture[id.xy + int2(0, 1)].xy : -vC;
+
+        // Calculate divergence using central differences
+        float div = 0.5 * ((vR.x - vL.x) + (vT.y - vB.y)) * inverseResolution.x;
+        DivergenceTexture[id.xy] = div;
+    }
+    else
+    {
+        DivergenceTexture[id.xy] = 0;
+    }
+}
+
+[numthreads(8, 8, 1)]
+void PressureSolve(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    if (IsCell(id.xy))
+    {
+        // Get neighboring pressures, handling boundaries
+        float pC = PressureTexturePrev[id.xy];
+
+        float pL = IsCell(id.xy - int2(1, 0)) ? PressureTexturePrev[id.xy - int2(1, 0)] : pC;
+        float pR = IsCell(id.xy + int2(1, 0)) ? PressureTexturePrev[id.xy + int2(1, 0)] : pC;
+        float pB = IsCell(id.xy - int2(0, 1)) ? PressureTexturePrev[id.xy - int2(0, 1)] : pC;
+        float pT = IsCell(id.xy + int2(0, 1)) ? PressureTexturePrev[id.xy + int2(0, 1)] : pC;
+
+        float div = DivergenceTexture[id.xy];
+
+        // Jacobi iteration for pressure solve
+        PressureTexture[id.xy] = (pL + pR + pB + pT - div * pressureScalar) * 0.25;
+    }
+    else
+    {
+        // For boundaries, sources, and sinks, maintain zero pressure
+        PressureTexture[id.xy] = 0;
+    }
+}
+
+[numthreads(8, 8, 1)]
+void PressureDelta(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    if (IsCell(id.xy))
+    {
+        // Get current velocity
+        float2 velocity = VelocityTexture[id.xy].xy;
+
+        // Get neighboring pressures for gradient calculation
+        float pC = PressureTexture[id.xy];
+
+        float pL = IsCell(id.xy - int2(1, 0)) ? PressureTexture[id.xy - int2(1, 0)] : pC;
+        float pR = IsCell(id.xy + int2(1, 0)) ? PressureTexture[id.xy + int2(1, 0)] : pC;
+        float pB = IsCell(id.xy - int2(0, 1)) ? PressureTexture[id.xy - int2(0, 1)] : pC;
+        float pT = IsCell(id.xy + int2(0, 1)) ? PressureTexture[id.xy + int2(0, 1)] : pC;
+
+        // Calculate pressure gradient
+        float2 grad = float2(pR - pL, pT - pB) * 0.5 * inverseResolution.x;
+
+        // Apply pressure gradient to velocity
+        velocity -= grad * pressureCoeff;
+
+        VelocityTexture[id.xy] = float4(velocity, 0, 0);
+    }
+}
+
+[numthreads(8, 8, 1)]
+void ApplyForces(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    float2 velocity = VelocityTexture[id.xy].xy;
+
+    // Apply source forces
+    if (IsSource(id.xy))
+    {
+        // Calculate outward direction (from center of source)
+        float2 direction = float2(0.5, 0.5) - (id.xy + 0.5) / resolution;
+        direction = normalize(direction);
+
+        // Apply force based on source strength
+        float strength = GetSourceMask(id.xy) * maxSinkSourceStrength;
+        velocity += direction * strength * deltaTime;
+    }
+    // Apply sink forces
+    else if (IsSink(id.xy))
+    {
+        // Calculate inward direction (toward center of sink)
+        float2 direction = (id.xy + 0.5) / resolution - float2(0.5, 0.5);
+        direction = normalize(direction);
+
+        // Apply force based on sink strength
+        float strength = GetSinkMask(id.xy) * maxSinkSourceStrength;
+        velocity += direction * strength * deltaTime;
+    }
+
+    // Only allow fluid cells to have velocity
+    if (IsCell(id.xy))
+    {
+        // Clamp velocity magnitude to maximum
+        float speed = length(velocity);
+        if (speed > maxVelocity)
+        {
+            velocity = normalize(velocity) * maxVelocity;
+        }
+
+        VelocityTexture[id.xy] = float4(velocity, 0, 0);
+    }
+    else
+    {
+        // Boundaries, sources, and sinks have zero velocity
+        VelocityTexture[id.xy] = float4(0, 0, 0, 0);
+    }
+}
+
+[numthreads(8, 8, 1)]
+void Visualization(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    // Create a color-based visualization
+    if (IsBoundary(id.xy))
+    {
+        // Blue for boundaries
+        VisualizationTexture[id.xy] = float4(0, 0, 1, 1);
+    }
+    else if (IsSource(id.xy))
+    {
+        // Green for sources
+        VisualizationTexture[id.xy] = float4(0, 1, 0, 1);
+    }
+    else if (IsSink(id.xy))
+    {
+        // Red for sinks
+        VisualizationTexture[id.xy] = float4(1, 0, 0, 1);
+    }
+    else
+    {
+        // For fluid cells, use velocity magnitude for red channel,
+        // pressure for green channel, and divergence for blue channel
+        float velMagnitude = length(VelocityTexture[id.xy].xy) / maxVelocity;
+
+        // Normalize pressure to 0-1 range (assuming pressure can be negative)
+        float pressureVal = (PressureTexture[id.xy] + 1.0) * 0.5;
+
+        // Normalize divergence to 0-1 range (assuming divergence can be negative)
+        float divergenceVal = (DivergenceTexture[id.xy] + 1.0) * 0.5;
+
+        VisualizationTexture[id.xy] = float4(velMagnitude, pressureVal, divergenceVal, 1);
+    }
+}

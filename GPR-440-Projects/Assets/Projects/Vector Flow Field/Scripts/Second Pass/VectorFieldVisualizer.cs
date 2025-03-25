@@ -35,18 +35,18 @@ namespace VFF
         private Bounds lastBounds;
 
         // Reference to the manager (will use singleton if not explicitly set)
-        private VectorFieldManager vectorFieldManager;
+        private SecondPassVectorFieldManager vectorFieldManager;
 
         /// <summary>
         /// Gets the VectorFieldManager to use for visualization.
         /// </summary>
-        private VectorFieldManager Manager
+        private SecondPassVectorFieldManager Manager
         {
             get
             {
                 if (vectorFieldManager == null)
                 {
-                    vectorFieldManager = VectorFieldManager.Instance;
+                    vectorFieldManager = SecondPassVectorFieldManager.GetInstance();
                 }
                 return vectorFieldManager;
             }
@@ -205,7 +205,7 @@ namespace VFF
         /// <summary>
         /// Explicitly sets the VectorFieldManager to use.
         /// </summary>
-        public void SetVectorFieldManager(VectorFieldManager manager)
+        public void SetVectorFieldManager(SecondPassVectorFieldManager manager)
         {
             if (vectorFieldManager != manager)
             {

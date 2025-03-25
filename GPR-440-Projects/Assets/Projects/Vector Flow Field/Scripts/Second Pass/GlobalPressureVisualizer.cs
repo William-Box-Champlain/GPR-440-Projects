@@ -9,7 +9,7 @@ namespace VFF
     public class GlobalPressureVisualizer : MonoBehaviour
     {
         [Tooltip("The Vector Field Manager to visualize")]
-        [SerializeField] private VectorFieldManager vectorFieldManager;
+        [SerializeField] private SecondPassVectorFieldManager vectorFieldManager;
 
         [Tooltip("Whether to visualize the global pressure field")]
         [SerializeField] private bool visualizeGlobalPressure = true;
@@ -38,7 +38,7 @@ namespace VFF
         private void Awake()
         {
             meshRenderer = GetComponent<MeshRenderer>();
-            
+
             // Create a new material based on the Unlit/Texture shader
             material = new Material(Shader.Find("Unlit/Texture"));
             meshRenderer.material = material;
@@ -49,7 +49,7 @@ namespace VFF
             // If no vector field manager is assigned, try to find one
             if (vectorFieldManager == null)
             {
-                vectorFieldManager = FindObjectOfType<VectorFieldManager>();
+                vectorFieldManager = FindObjectOfType<SecondPassVectorFieldManager>();
                 if (vectorFieldManager == null)
                 {
                     Debug.LogError("GlobalPressureVisualizer: No VectorFieldManager found in the scene.");
@@ -119,10 +119,10 @@ namespace VFF
             for (int i = 0; i < pixels.Length; i++)
             {
                 float value = pixels[i].r;
-                
+
                 // Scale the value for better visualization
                 value = value * visualizationScale;
-                
+
                 // Map the value to a color
                 if (visualizeGlobalPressure || visualizeLocalPressure || visualizeDivergence)
                 {

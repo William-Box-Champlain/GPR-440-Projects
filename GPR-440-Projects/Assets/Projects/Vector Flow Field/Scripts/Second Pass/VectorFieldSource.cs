@@ -1,36 +1,30 @@
 using UnityEngine;
 
+namespace VFF
+{
     /// <summary>
-    /// Component that marks a GameObject as a source (area to avoid) in the vector field.
+    /// Component that marks a GameObject as a sink (destination) in the vector field.
     /// </summary>
     public class VectorFieldSource : MonoBehaviour
     {
-        [Tooltip("Radius of influence for this source")]
+        [Tooltip("Radius of influence for this sink")]
         [Range(0.01f, 5.0f)]
         public float radius = 0.5f;
 
-        [Range(0.01f,5.0f)]
+        [Range(-0.01f, -5.0f)]
         public float strength = 1.0f;
 
-        [Tooltip("Whether this source is active")]
+        [Tooltip("Whether this sink is active")]
         public bool isActive = true;
-        
+
         // Reference to the manager (set when registered)
-        private VFF.VectorFieldManager manager;
-        
-        /// <summary>
-        /// Auto-register with the VectorFieldManager when enabled.
-        /// </summary>
-        private void OnEnable()
-        {
-            
-        }
+        private SecondPassVectorFieldManager manager;
 
         private void Start()
         {
-            if (VFF.VectorFieldManager.Instance != null)
+            if (SecondPassVectorFieldManager.GetInstance() != null)
             {
-                VFF.VectorFieldManager.Instance.RegisterSource(this);
+                SecondPassVectorFieldManager.GetInstance().RegisterSource(this);
             }
         }
 
@@ -44,20 +38,20 @@ using UnityEngine;
                 manager.UnregisterSource(this);
             }
         }
-        
+
         /// <summary>
         /// Sets the manager reference.
         /// </summary>
-        /// <param name="manager">The VectorFieldManager to associate with this source.</param>
-        public void SetManager(VFF.VectorFieldManager manager)
+        /// <param name="manager">The VectorFieldManager to associate with this sink.</param>
+        public void SetManager(SecondPassVectorFieldManager manager)
         {
             this.manager = manager;
         }
-        
+
         /// <summary>
-        /// Sets the active state of this source.
+        /// Sets the active state of this sink.
         /// </summary>
-        /// <param name="active">Whether the source is active.</param>
+        /// <param name="active">Whether the sink is active.</param>
         public void SetActive(bool active)
         {
             if (isActive != active)
@@ -70,3 +64,4 @@ using UnityEngine;
             }
         }
     }
+}

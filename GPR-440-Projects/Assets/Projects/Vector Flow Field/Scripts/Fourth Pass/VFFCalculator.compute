@@ -1,22 +1,11 @@
 #pragma kernel Advection;
 #pragma kernel Diffusion;
+#pragma kernel ApplyForces;
 #pragma kernel Divergence;
 #pragma kernel PressureDelta;
 #pragma kernel PressureSolve;
 #pragma kernel Visualization;
-
-
-// Buffer for dynamic influence points
-struct InfluencePoint
-{
-    float3 position; // Position in world space
-    float strength; // Strength (positive for source, negative for sink)
-    float radius; // Radius of influence
-    int type; // 0=source, 1=sink, 2=directional
-    float3 direction; // Direction for directional influences
-};
-StructuredBuffer<InfluencePoint> InfluenceBuffer;
-int InfluenceCount;
+#pragma enable_d3d11_debug_symbols
 
 //buffers
 RWTexture2D<float4> VelocityTexture;
@@ -26,6 +15,7 @@ RWTexture2D<float> PressureTexturePrev;
 RWTexture2D<float> DivergenceTexture;
 RWTexture2D<float4> BoundaryTexture;
 RWTexture2D<float4> VisualizationTexture;
+RWTexture2D<float4> BoundaryAndInfluenceTexture;
 
 //parameters
 float maxSinkSourceStrength;
@@ -38,13 +28,13 @@ int iterationCount;
 float2 inverseResolution; //calculated as resolution / bounds.xy 
 
 //constants
-static float4 CELL      = float4(0, 0, 0, 1);
-static float4 BOUNDARY  = float4(0, 0, 1, 0);
-static float4 SOURCE    = float4(0, 1, 0, 0);
-static float4 SINK      = float4(1, 0, 0, 0);
+static float4 CELL = float4(0, 0, 0, 1);
+static float4 BOUNDARY = float4(0, 0, 1, 0);
+static float4 SOURCE = float4(0, 1, 0, 0);
+static float4 SINK = float4(1, 0, 0, 0);
 static float EPSILON = 0.01;
 static float THRESHOLD = 0.001;
-static float DISSIPATION = 0.99;
+static float DISSIPATION = 0.95;
 
 //Helper functions
 
@@ -52,41 +42,42 @@ static float DISSIPATION = 0.99;
 bool IsCell(int2 cell)
 {
     return BoundaryTexture[cell].a > THRESHOLD && //opaque??
-           BoundaryTexture[cell].r < THRESHOLD &&
-           BoundaryTexture[cell].g < THRESHOLD &&
-           BoundaryTexture[cell].b < THRESHOLD;
+        BoundaryTexture[cell].b < THRESHOLD;
 }
 
 bool IsBoundary(int2 cell)
 {
     return BoundaryTexture[cell].a < THRESHOLD &&
-           BoundaryTexture[cell].r < THRESHOLD &&
-           BoundaryTexture[cell].g < THRESHOLD &&
-           BoundaryTexture[cell].b > THRESHOLD;   //blue
+        BoundaryTexture[cell].b > THRESHOLD;   //blue
 }
 
 bool IsSource(int2 cell)
 {
     return BoundaryTexture[cell].a < THRESHOLD &&
-           BoundaryTexture[cell].r < THRESHOLD &&
-           BoundaryTexture[cell].g > THRESHOLD && //green
-           BoundaryTexture[cell].b < THRESHOLD;
+        BoundaryTexture[cell].r < THRESHOLD &&
+        BoundaryTexture[cell].g > THRESHOLD && //green
+        BoundaryTexture[cell].b < THRESHOLD;
 }
 
 bool IsSink(int2 cell)
 {
     return BoundaryTexture[cell].a < THRESHOLD &&
-           BoundaryTexture[cell].r > THRESHOLD && //red is big
-           BoundaryTexture[cell].g < THRESHOLD &&
-           BoundaryTexture[cell].b < THRESHOLD;
+        BoundaryTexture[cell].r > THRESHOLD && //red is big
+        BoundaryTexture[cell].g < THRESHOLD &&
+        BoundaryTexture[cell].b < THRESHOLD;
 }
 
 bool WithinAbsoluteBounds(uint2 id)
 {
-    return (id.x >= (uint) resolution.x || id.y >= (uint) resolution.y);
+    return (id.x <= (uint) resolution.x || id.y <= (uint) resolution.y);
 }
 
 //masking helpers
+float GetCellMask(int2 cell)
+{
+    return step(THRESHOLD, BoundaryTexture[cell].a);
+}
+
 float GetBoundaryMask(int2 cell)
 {
     // Returns 1.0 if cell is a boundary, 0.0 otherwise
@@ -96,13 +87,13 @@ float GetBoundaryMask(int2 cell)
 float GetSourceMask(int2 cell)
 {
     // Returns 1.0 if cell is a source, 0.0 otherwise
-    return step(THRESHOLD, BoundaryTexture[cell].g);
+    return BoundaryTexture[cell].g;
 }
 
 float GetSinkMask(int2 cell)
 {
     // Returns 1.0 if cell is a sink, 0.0 otherwise
-    return step(THRESHOLD, BoundaryTexture[cell].r);
+    return BoundaryTexture[cell].r;
 
 }
 
@@ -117,10 +108,10 @@ float2 SampleVelocity(float2 pos, RWTexture2D<float4> velocityTex)
     // Get texture dimensions
     float2 texSize;
     velocityTex.GetDimensions(texSize.x, texSize.y);
-    
+
     // Ensure position is within bounds
     pos = clamp(pos, float2(0, 0), texSize - float2(1, 1));
-    
+
     // Get integer position and fraction
     float2 i = floor(pos);
     float2 f = pos - i;
@@ -128,92 +119,89 @@ float2 SampleVelocity(float2 pos, RWTexture2D<float4> velocityTex)
     int2 i10 = i00 + int2(1, 0);
     int2 i01 = i00 + int2(0, 1);
     int2 i11 = i00 + int2(1, 1);
-    
+
     // Boundary handling - we need to know which cells are boundaries
     float i00Mask = GetBoundaryMask(i00);
     float i10Mask = GetBoundaryMask(i10);
     float i01Mask = GetBoundaryMask(i01);
     float i11Mask = GetBoundaryMask(i11);
-    
-    
+
+
     // Sample velocities with boundary conditions applied
     float2 v00 = i00Mask * velocityTex[i00].xy;
     float2 v10 = i10Mask * velocityTex[i10].xy;
     float2 v01 = i01Mask * velocityTex[i01].xy;
     float2 v11 = i11Mask * velocityTex[i11].xy;
-    
+
     // Bilinear interpolation
-    return lerp(lerp(v00, v10, f.x),lerp(v01, v11, f.x),f.y);
+    return lerp(lerp(v00, v10, f.x), lerp(v01, v11, f.x), f.y);
 }
 
-[numthreads(8,8,1)]
+[numthreads(8, 8, 1)]
 void Advection(uint3 id : SV_DispatchThreadID)
 {
     if (!WithinAbsoluteBounds(id.xy))
         return;
-    
+
     int2 cell = int2(id.xy);
-    float2 position = float2(cell) + 0.5; //centers the position on cell
-    
+    float2 position = float2(cell)+0.5; //centers the position on cell
+
     //skip if not a cell
-    if(!IsCell(cell))
+    if (!IsCell(cell))
     {
-        if(IsBoundary(cell))
-        {
-            VelocityTexturePrev[cell] = float4(0, 0, 0, 0);
-        }
+        VelocityTexturePrev[cell] = VelocityTexturePrev[cell] * (1.0 - GetBoundaryMask(cell));
         return;
     }
-        
+
     float2 velocity = VelocityTexture[cell].xy;
-    
+
     float2 backTracedPosition = position - velocity * deltaTime * inverseResolution;
-    
+
     float2 newVelocity = SampleVelocity(backTracedPosition, VelocityTexture);
-    
+
     newVelocity *= DISSIPATION;
-    
-    VelocityTexturePrev[cell] = float4(newVelocity, 0, 0);
+
+    VelocityTexture[cell] = float4(newVelocity, 0, 0);
 }
 
-[numthreads(8,8,1)]
+[numthreads(8, 8, 1)]
 void Diffusion(uint3 id : SV_DispatchThreadID)
 {
     if (!WithinAbsoluteBounds(id.xy))
         return;
-    
+
     int2 cell = int2(id.xy);
-    
+
     if (!IsCell(cell))
     {
         VelocityTexture[cell] = VelocityTexturePrev[cell];
         return;
     }
-        
+
     float2 velocity = VelocityTexturePrev[cell].xy;
-    
+
     float alpha = viscosityCoeff * deltaTime;
-    float beta = 1.0 / (1.0 + (4.0 * alpha));
-    
+    float beta = 1.0 / (4.0 * alpha);
+
     // Get neighboring cells with clamping to ensure valid indices
     int2 idxL = int2(max(0, cell.x - 1), cell.y);
-    int2 idxR = int2(min((int) resolution.x - 1, cell.x + 1), cell.y);
+    int2 idxR = int2(min((int)resolution.x - 1, cell.x + 1), cell.y);
     int2 idxB = int2(cell.x, max(0, cell.y - 1));
-    int2 idxT = int2(cell.x, min((int) resolution.y - 1, cell.y + 1));
-    
+    int2 idxT = int2(cell.x, min((int)resolution.y - 1, cell.y + 1));
+
     // Get boundary states for neighbors (0 = fluid, 1 = boundary)
     float bL = GetBoundaryMask(idxL);
     float bR = GetBoundaryMask(idxR);
     float bB = GetBoundaryMask(idxB);
     float bT = GetBoundaryMask(idxT);
-    
-    for (int i = 0; i < iterationCount; i++)
+
+    for (uint i = 0; i < (uint)iterationCount; i++)
     {
         // Compute which buffer to read from based on iteration parity
         // This creates a mask value of either 0.0 or 1.0
-        float readFromCurrent = i % 2;
+        float readFromCurrent = i % (uint)2;
         float readFromPrev = 1.0 - readFromCurrent;
-        
+
         // Sample velocities from neighbors from both buffers
         // Then blend between them based on which buffer we should be reading from
         float2 vL_prev = VelocityTexturePrev[idxL].xy;
@@ -221,221 +209,254 @@ void Diffusion(uint3 id : SV_DispatchThreadID)
         float2 vB_prev = VelocityTexturePrev[idxB].xy;
         float2 vT_prev = VelocityTexturePrev[idxT].xy;
         float2 vC_prev = VelocityTexturePrev[cell].xy;
-        
+
         float2 vL_curr = VelocityTexture[idxL].xy;
         float2 vR_curr = VelocityTexture[idxR].xy;
         float2 vB_curr = VelocityTexture[idxB].xy;
         float2 vT_curr = VelocityTexture[idxT].xy;
         float2 vC_curr = VelocityTexture[cell].xy;
-        
+
         // Use masking to select which buffer to read from
         float2 vL = vL_prev * readFromPrev + vL_curr * readFromCurrent;
         float2 vR = vR_prev * readFromPrev + vR_curr * readFromCurrent;
         float2 vB = vB_prev * readFromPrev + vB_curr * readFromCurrent;
         float2 vT = vT_prev * readFromPrev + vT_curr * readFromCurrent;
         float2 vC = vC_prev * readFromPrev + vC_curr * readFromCurrent;
-        
+
         // Apply boundary conditions - if neighbor is boundary, use zero velocity
         vL = lerp(vL, float2(0, 0), bL);
         vR = lerp(vR, float2(0, 0), bR);
         vB = lerp(vB, float2(0, 0), bB);
         vT = lerp(vT, float2(0, 0), bT);
-        
+
         // Update velocity according to the diffusion equation
-        velocity = (vC + alpha * (vL + vR + vB + vT)) * beta;
-        
+        velocity = (vL + vR + vB + vT + vC * alpha) * beta;
+
         // Write the updated velocity to both buffers, using masking to select the right one
         // When readFromPrev is 1.0, we write to the current buffer
         // When readFromCurrent is 1.0, we write to the prev buffer
         VelocityTexture[cell] = float4(velocity, 0, 0) * readFromPrev +
-                               VelocityTexture[cell] * readFromCurrent;
-        
+            VelocityTexture[cell] * readFromCurrent;
+
         VelocityTexturePrev[cell] = float4(velocity, 0, 0) * readFromCurrent +
-                                   VelocityTexturePrev[cell] * readFromPrev;
+            VelocityTexturePrev[cell] * readFromPrev;
     }
 
     // Ensure the final result is in VelocityTexture (the "current" buffer)
     // Check if the last iteration wrote to VelocityTexturePrev
     // We can compute this without branching
-    float finalReadFromCurrent = (iterationCount - 1) % 2;
+    float finalReadFromCurrent = (uint)(iterationCount - 1) % (uint)2;
     float finalReadFromPrev = 1.0 - finalReadFromCurrent;
-    
+
     // If the last iteration wrote to prev (finalReadFromCurrent = 1.0), 
     // then copy from prev to current
     VelocityTexture[cell] = VelocityTexture[cell] * finalReadFromCurrent +
-                           float4(velocity, 0, 0) * finalReadFromPrev;
+        float4(velocity, 0, 0) * finalReadFromPrev;
 }
 
-[numthreads(8,8,1)]
+[numthreads(8, 8, 1)]
+void ApplyForces(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+
+    if (!IsCell(cell))
+    {
+        //VelocityTexture[cell] = VelocityTexturePrev[cell];
+        return;
+    }
+
+    // Get current velocity
+    float2 velocity = VelocityTexture[cell].xy;
+
+    // Check if cell is source or sink
+    float sourceMask = GetSourceMask(cell);
+    float sinkMask = -1 * GetSinkMask(cell);
+
+    float2 cellCenter = float2(cell)+0.5;
+
+    float2 posDelta = float2(cell)-cellCenter;
+    float radius = length(posDelta) + 0.01; // Avoid division by zero
+    float2 direction = posDelta / radius; // Normalize
+
+    velocity += direction * (sourceMask + sinkMask) * maxSinkSourceStrength * deltaTime;
+
+    // Update velocity field
+    VelocityTexture[cell] = float4(velocity, 0, 0);
+}
+
+[numthreads(8, 8, 1)]
 void Divergence(uint3 id : SV_DispatchThreadID)
 {
     if (!WithinAbsoluteBounds(id.xy))
         return;
-    
+
     int2 cell = int2(id.xy);
-    
-    if(IsBoundary(cell))
+
+    if (IsBoundary(cell))
     {
         DivergenceTexture[cell] = 0;
         return;
     }
-    
+
     // Get center velocity
     float2 vCenter = VelocityTexture[cell].xy;
-    
+
     // Get neighboring cells with clamping to ensure valid indices
     int2 idxL = int2(max(0, cell.x - 1), cell.y);
-    int2 idxR = int2(min((int) resolution.x - 1, cell.x + 1), cell.y);
+    int2 idxR = int2(min((int)resolution.x - 1, cell.x + 1), cell.y);
     int2 idxB = int2(cell.x, max(0, cell.y - 1));
-    int2 idxT = int2(cell.x, min((int) resolution.y - 1, cell.y + 1));
-    
+    int2 idxT = int2(cell.x, min((int)resolution.y - 1, cell.y + 1));
+
     // Get boundary states for neighbors (0 = fluid, 1 = boundary)  
     float bL = GetBoundaryMask(idxL);
     float bR = GetBoundaryMask(idxR);
     float bB = GetBoundaryMask(idxB);
     float bT = GetBoundaryMask(idxT);
-    
+
     // Sample velocities from neighbors
     float2 vL = VelocityTexture[idxL].xy;
     float2 vR = VelocityTexture[idxR].xy;
     float2 vB = VelocityTexture[idxB].xy;
     float2 vT = VelocityTexture[idxT].xy;
-    
+
     // Apply boundary conditions using masking instead of branches
     // For boundary cells: normal component is reflection of center, tangential remains unchanged
     vL.x = lerp(vL.x, -vCenter.x, bL);
     vR.x = lerp(vR.x, -vCenter.x, bR);
     vB.y = lerp(vB.y, -vCenter.y, bB);
     vT.y = lerp(vT.y, -vCenter.y, bT);
-    
+
     // Calculate divergence using central differences with grid scale factors
     float divergence = (0.5 * inverseResolution.x * (vR.x - vL.x)) + (0.5 * inverseResolution.y * (vT.y - vB.y));
-    
+
     // Store the result
     DivergenceTexture[cell] = divergence;
 }
 
-[numthreads(8,8,1)]
+[numthreads(8, 8, 1)]
 void PressureDelta(uint3 id : SV_DispatchThreadID)
 {
     if (!WithinAbsoluteBounds(id.xy))
         return;
-    
+
     int2 cell = int2(id.xy);
-    
+
     if (!IsCell(cell))
         return;
-    
+
     float boundaryMask = GetBoundaryMask(cell);
     float sourceMask = GetSourceMask(cell);
     float sinkMask = GetSinkMask(cell);
-    
+
     float2 velocity = VelocityTexture[cell].xy;
     float centerPressure = PressureTexture[cell];
-    
+
     int2 idxL = int2(max(0, cell.x - 1), cell.y); //boundary check so that x cannot be less than 0
-    int2 idxR = int2(min((int) resolution.x - 1, cell.x + 1), cell.y); //boundary check so that x cannot be greater than resolution - 1
+    int2 idxR = int2(min((int)resolution.x - 1, cell.x + 1), cell.y); //boundary check so that x cannot be greater than resolution - 1
     int2 idxB = int2(cell.x, max(0, cell.y - 1)); //same idea as idxL, but vertical
-    int2 idxT = int2(cell.x, min((int) resolution.y - 1, cell.y + 1)); //same idea as idxR, but vertical
+    int2 idxT = int2(cell.x, min((int)resolution.y - 1, cell.y + 1)); //same idea as idxR, but vertical
 
     // Create edge masks (1.0 if at edge, 0.0 otherwise)
     float leftEdgeMask = step(cell.x, 0);
-    float rightEdgeMask = step((int) resolution.x - 1, cell.x);
+    float rightEdgeMask = step((int)resolution.x - 1, cell.x);
     float bottomEdgeMask = step(cell.y, 0);
-    float topEdgeMask = step((int) resolution.y - 1, cell.y);
-    
+    float topEdgeMask = step((int)resolution.y - 1, cell.y);
+
     // Get boundary masks for neighbors
     float leftBoundaryMask = GetBoundaryMask(idxL) * (1.0 - leftEdgeMask);
     float rightBoundaryMask = GetBoundaryMask(idxR) * (1.0 - rightEdgeMask);
     float bottomBoundaryMask = GetBoundaryMask(idxB) * (1.0 - bottomEdgeMask);
     float topBoundaryMask = GetBoundaryMask(idxT) * (1.0 - topEdgeMask);
-    
+
     // Get neighbor pressures
     float pL = PressureTexture[idxL];
     float pR = PressureTexture[idxR];
     float pB = PressureTexture[idxB];
     float pT = PressureTexture[idxT];
-    
+
     // Use center pressure for boundary neighbors using masking
     pL = lerp(pL, centerPressure, leftBoundaryMask + leftEdgeMask);
     pR = lerp(pR, centerPressure, rightBoundaryMask + rightEdgeMask);
     pB = lerp(pB, centerPressure, bottomBoundaryMask + bottomEdgeMask);
     pT = lerp(pT, centerPressure, topBoundaryMask + topEdgeMask);
-    
+
     // Calculate pressure gradient
     float2 pressureGrad = float2(pR - pL, pT - pB) * 0.5;
-    
+
     // Subtract gradient to make velocity divergence-free
     velocity -= pressureGrad;
-    
+
     // Store the result
     VelocityTexture[cell] = float4(velocity, 0, 0);
 }
 
-[numthreads(8,8,1)]
+[numthreads(8, 8, 1)]
 void PressureSolve(uint3 id : SV_DispatchThreadID)
 {
     if (!WithinAbsoluteBounds(id.xy))
         return;
-    
+
     int2 cell = int2(id.xy);
-    
+
     if (!IsCell(cell))
         return;
-    
+
     float boundaryMask = GetBoundaryMask(cell);
     float sourceMask = GetSourceMask(cell);
     float sinkMask = GetSinkMask(cell);
     float cellPressure = GetCellPressure(cell);
-    
+
     float pressure = (1.0 - boundaryMask) * cellPressure * pressureCoeff;
-    
+
     PressureTexture[cell] = pressure;
     PressureTexturePrev[cell] = pressure;
-    
+
     // Gauss-Seidel relaxation loop for normal fluid cells
     for (int i = 0; i < iterationCount; i++)
     {
         // Get neighboring cells with edge checks
         int2 idxL = int2(max(0, cell.x - 1), cell.y);
-        int2 idxR = int2(min((int) resolution.x - 1, cell.x + 1), cell.y);
+        int2 idxR = int2(min((int)resolution.x - 1, cell.x + 1), cell.y);
         int2 idxB = int2(cell.x, max(0, cell.y - 1));
-        int2 idxT = int2(cell.x, min((int) resolution.y - 1, cell.y + 1));
-        
+        int2 idxT = int2(cell.x, min((int)resolution.y - 1, cell.y + 1));
+
         // Create edge masks (1.0 if at edge, 0.0 otherwise)
         float leftEdgeMask = step(cell.x, 0);
-        float rightEdgeMask = step((int) resolution.x - 1, cell.x);
+        float rightEdgeMask = step((int)resolution.x - 1, cell.x);
         float bottomEdgeMask = step(cell.y, 0);
-        float topEdgeMask = step((int) resolution.y - 1, cell.y);
-        
+        float topEdgeMask = step((int)resolution.y - 1, cell.y);
+
         // Get boundary masks for neighbors
         float leftBoundaryMask = GetBoundaryMask(idxL) * (1.0 - leftEdgeMask);
         float rightBoundaryMask = GetBoundaryMask(idxR) * (1.0 - rightEdgeMask);
         float bottomBoundaryMask = GetBoundaryMask(idxB) * (1.0 - bottomEdgeMask);
         float topBoundaryMask = GetBoundaryMask(idxT) * (1.0 - topEdgeMask);
-        
+
         // Get neighboring pressures
         float pL = PressureTexturePrev[idxL];
         float pR = PressureTexturePrev[idxR];
         float pB = PressureTexturePrev[idxB];
         float pT = PressureTexturePrev[idxT];
-        
+
         // Apply boundary conditions using masks
         pL = lerp(pL, pressure, leftBoundaryMask + leftEdgeMask);
         pR = lerp(pR, pressure, rightBoundaryMask + rightEdgeMask);
         pB = lerp(pB, pressure, bottomBoundaryMask + bottomEdgeMask);
         pT = lerp(pT, pressure, topBoundaryMask + topEdgeMask);
-        
+
         // Get divergence at this cell
         float div = DivergenceTexture[cell];
-        
+
         // Pressure update equation
         pressure = (pL + pR + pB + pT - div) * 0.25;
-        
+
         // Update the pressure value for the next iteration
         PressureTexturePrev[cell] = pressure;
     }
-    
+
     PressureTexture[cell] = pressure;
 }
 
@@ -445,34 +466,34 @@ void Visualization(uint3 id : SV_DispatchThreadID)
     // Check if within grid bounds
     if (id.x >= (uint) resolution.x || id.y >= (uint) resolution.y)
         return;
-    
+
     int2 cell = int2(id.xy);
-    
+
     // Get cell type masks
     float boundaryMask = GetBoundaryMask(cell);
     float sourceMask = GetSourceMask(cell);
     float sinkMask = GetSinkMask(cell);
-    
+
     // Get velocity for fluid cell visualization
     float2 vel = VelocityTexture[cell].xy;
-    
+
     // Set base colors for each cell type
-    float4 boundaryColor = float4(0.2, 0.2, 0.2, 1.0);
-    float4 sourceColor = float4(0.0, 1.0, 0.0, 1.0);
-    float4 sinkColor = float4(1.0, 0.0, 0.0, 1.0);
-    
+    float4 boundaryColor = BOUNDARY;
+    float4 sourceColor = SOURCE;
+    float4 sinkColor = SINK;
+
     // Calculate velocity-based color for fluid cells
     float angle = atan2(vel.y, vel.x) / (3.14159 * 2) + 0.5;
     float magnitude = length(vel);
     float saturation = clamp(magnitude * 3.0, 0.0, 1.0);
     float value = clamp(0.5 + magnitude * 2.0, 0.0, 1.0);
-    
+
     // Convert HSV to RGB for fluid color
     float h = angle * 6.0;
     float c = saturation * value;
     float x = c * (1.0 - abs(fmod(h, 2.0) - 1.0));
     float m = value - c;
-    
+
     float3 rgb;
     if (h < 1.0)
         rgb = float3(c, x, 0.0);
@@ -486,15 +507,15 @@ void Visualization(uint3 id : SV_DispatchThreadID)
         rgb = float3(x, 0.0, c);
     else
         rgb = float3(c, 0.0, x);
-    
+
     float4 fluidColor = float4(rgb + m, 1.0);
-    
+
     // Blend colors based on cell type masks
     float4 color = fluidColor;
     color = lerp(color, boundaryColor, boundaryMask);
     color = lerp(color, sourceColor, sourceMask);
     color = lerp(color, sinkColor, sinkMask);
-    
+
     // Store the visualization color
     VisualizationTexture[cell] = color;
 }

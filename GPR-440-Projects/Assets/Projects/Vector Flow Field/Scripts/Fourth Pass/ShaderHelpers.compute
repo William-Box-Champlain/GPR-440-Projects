@@ -1,0 +1,480 @@
+﻿#pragma kernel Advection;
+#pragma kernel Diffusion;
+#pragma kernel ApplyForces;
+#pragma kernel Divergence;
+#pragma kernel PressureDelta;
+#pragma kernel PressureSolve;
+#pragma kernel Visualization;
+#pragma enable_d3d11_debug_symbols
+
+//buffers
+RWTexture2D<float4> VelocityTexture;
+RWTexture2D<float4> VelocityTexturePrev;
+RWTexture2D<float> PressureTexture;
+RWTexture2D<float> PressureTexturePrev;
+RWTexture2D<float> DivergenceTexture;
+RWTexture2D<float4> BoundaryTexture;
+RWTexture2D<float4> VisualizationTexture;
+
+//parameters
+float maxVelocity;
+float maxSinkSourceStrength;
+float deltaTime;
+float2 resolution;
+float4 bounds;
+float viscosityCoeff;
+float pressureCoeff;
+float pressureScalar;
+int iterationCount;
+float2 inverseResolution; //calculated as resolution / bounds.xy 
+
+//constants
+static float4 CELL = float4(0, 0, 0, 1);
+static float4 BOUNDARY = float4(0, 0, 1, 0);
+static float4 SOURCE = float4(0, 1, 0, 0);
+static float4 SINK = float4(1, 0, 0, 0);
+static float EPSILON = 0.01;
+static float THRESHOLD = 0.01;
+static float DISSIPATION = 0.8;
+
+//Helper functions
+
+//bool helpers
+bool IsCell(int2 cell)
+{
+    return BoundaryTexture[cell].a > THRESHOLD && //opaque??
+        BoundaryTexture[cell].b < THRESHOLD;
+}
+
+bool IsBoundary(int2 cell)
+{
+    return BoundaryTexture[cell].a < THRESHOLD &&
+        BoundaryTexture[cell].b > THRESHOLD;   //blue
+}
+
+bool IsSource(int2 cell)
+{
+    return BoundaryTexture[cell].r < THRESHOLD &&
+        BoundaryTexture[cell].g > THRESHOLD && //green
+        BoundaryTexture[cell].b < THRESHOLD;
+}
+
+bool IsSink(int2 cell)
+{
+    return BoundaryTexture[cell].r > THRESHOLD && //red is big
+        BoundaryTexture[cell].g < THRESHOLD &&
+        BoundaryTexture[cell].b < THRESHOLD;
+}
+
+bool WithinAbsoluteBounds(uint2 id)
+{
+    return (id.x <= (uint) resolution.x || id.y <= (uint) resolution.y);
+}
+
+//masking helpers
+float GetCellMask(int2 cell)
+{
+    return step(THRESHOLD, BoundaryTexture[cell].a);
+}
+
+float GetBoundaryMask(int2 cell)
+{
+    // Returns 1.0 if cell is a boundary, 0.0 otherwise
+    return step(THRESHOLD, BoundaryTexture[cell].b);
+}
+
+float GetSourceMask(int2 cell)
+{
+    // Returns normalized strength of source
+    return BoundaryTexture[cell].g;
+}
+
+float GetSinkMask(int2 cell)
+{
+    // Returns normalized strength of sink
+    return BoundaryTexture[cell].r;
+
+}
+
+float2 Normalize(float2 velocity)
+{
+    return velocity / max(length(velocity), 0.01);
+}
+
+[numthreads(8, 8, 1)]
+void Advection(uint3 id : SV_DispatchThreadID)
+{
+    // Skip if outside resolution bounds
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = id.xy;
+
+    // Don't update boundary cells
+    if (IsBoundary(cell))
+    {
+        VelocityTexture[cell] = float4(0, 0, 0, 0);
+        return;
+    }
+
+    // For source cells, maintain specified velocity
+    if (IsSource(cell))
+    {
+        // Optional: Add source velocity logic here if needed
+        return;
+    }
+
+    // For normal fluid cells - perform advection
+    // Follow the velocity field "back in time"
+    float2 pos = float2(cell)-deltaTime * VelocityTexturePrev[cell].xy * inverseResolution;
+
+    // Ensure position stays within bounds
+    pos = clamp(pos, float2(0, 0), resolution - float2(1, 1));
+
+    // Bilinear interpolation for smoother results
+    int2 pos0 = int2(floor(pos));
+    int2 pos1 = int2(ceil(pos));
+
+    // Ensure all corners are within bounds
+    pos0 = max(0, min(pos0, int2(resolution)-1));
+    pos1 = max(0, min(pos1, int2(resolution)-1));
+
+    // Calculate interpolation weights
+    float2 t = pos - pos0;
+
+    // Perform bilinear interpolation manually
+    float4 value =
+        VelocityTexturePrev[pos0] * (1.0 - t.x) * (1.0 - t.y) +
+        VelocityTexturePrev[int2(pos1.x, pos0.y)] * t.x * (1.0 - t.y) +
+        VelocityTexturePrev[int2(pos0.x, pos1.y)] * (1.0 - t.x) * t.y +
+        VelocityTexturePrev[int2(pos1.x, pos1.y)] * t.x * t.y;
+
+    // Apply dissipation factor
+    value *= DISSIPATION;
+
+    // Ensure velocity doesn't exceed maximum
+    value.xy = Normalize(value.xy) * min(length(value.xy), maxVelocity);
+
+    // Write the result
+    VelocityTexture[cell] = value;
+}
+
+[numthreads(8, 8, 1)]
+void Diffusion(uint3 id : SV_DispatchThreadID)
+{
+    // Skip processing if outside resolution bounds
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    // Skip calculation for boundary cells
+    if (IsBoundary(id.xy))
+    {
+        VelocityTexture[id.xy] = float4(0, 0, 0, 0);
+        return;
+    }
+
+    int2 coords = id.xy;
+
+    // Setup for Jacobi iteration
+    // alpha = (dx*dx) / (viscosity * dt), where dx is cell size
+    float alpha = (bounds.x * bounds.y) / (resolution.x * resolution.y) / (viscosityCoeff * deltaTime);
+    // rBeta = 1 / (1 + 4*alpha)
+    float rBeta = 1.0 / (1.0 + 4.0 * alpha);
+
+    // Sample neighboring cells (left, right, bottom, top)
+    float4 xL = VelocityTexturePrev[coords - int2(1, 0)];
+    float4 xR = VelocityTexturePrev[coords + int2(1, 0)];
+    float4 xB = VelocityTexturePrev[coords - int2(0, 1)];
+    float4 xT = VelocityTexturePrev[coords + int2(0, 1)];
+
+    // Sample the center cell (b in the Jacobi solver)
+    float4 bC = VelocityTexturePrev[coords];
+
+    // Apply the cell mask to handle non-boundary special cells (sources/sinks)
+    float cellMask = GetCellMask(coords);
+
+    // Calculate the diffused velocity using Jacobi iteration
+    float4 result = (xL + xR + xB + xT + alpha * bC) * rBeta;
+
+    // Apply cell mask (0 for boundary, 1 for fluid cell)
+    result *= cellMask;
+
+    // Apply dissipation factor for stability
+    result *= DISSIPATION;
+
+    // Handle sources and sinks
+    float sourceMask = GetSourceMask(coords);
+    float sinkMask = GetSinkMask(coords);
+
+    // Keep original velocity at sources/sinks
+    result = VelocityTexturePrev[coords] * (1 - GetSourceMask(coords)) * (1 - GetSinkMask(coords));
+
+    // Write the result to the velocity texture
+    VelocityTexture[coords] = result;
+}
+
+// ApplyForces kernel
+// Applies forces from sources, sinks, and any other external forces to the velocity field
+[numthreads(8, 8, 1)]
+void ApplyForces(uint3 id : SV_DispatchThreadID)
+{
+    // Check if we're within bounds
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    // Get current cell information
+    float2 cellPos = id.xy;
+    float4 velocity = VelocityTexture[cellPos];
+
+    // Skip computations for boundary cells
+    float boundaryMask = (1.0 - GetBoundaryMask(cellPos)); //If boundary, equals 0
+
+    // Apply force from sources (outward flow)
+    float sourceMask = GetSourceMask(cellPos);
+    float notSourceMask = 1.0 - sourceMask; //if sourceMask = 1.0, then notSourceMask = 0.0;
+    
+    // Calculate direction of force from source based on position
+    // Simple radial outward force from source cell
+    // Strength is based on the source mask value (green channel)
+     float2 sourceForce = Normalize(float2(id.x - cellPos.x, id.y - cellPos.y) + float2(0.01, 0.01));
+
+    // Apply source force scaled by strength and max value
+    velocity.xy += sourceForce * sourceMask * maxSinkSourceStrength * deltaTime;
+
+
+    // Apply force from sinks (inward flow)
+    float sinkMask = GetSinkMask(cellPos);
+    float notSinkMask = 1.0 - sinkMask;
+
+    // Calculate direction of force toward sink based on position
+    // Simple radial inward force to sink cell
+    // Direction is inward toward the sink
+    float2 sinkForce = -Normalize(float2(id.x - cellPos.x, id.y - cellPos.y) + float2(0.01, 0.01));
+
+    // Apply sink force scaled by strength and max value
+    velocity.xy += sinkForce * sinkMask * maxSinkSourceStrength * deltaTime;
+
+    // Apply dissipation for stability
+    velocity.xy *= DISSIPATION;
+
+    velocity.xy = Normalize(velocity.xy) * min(length(velocity.xy), maxVelocity);
+
+    // Store updated velocity
+    VelocityTexture[cellPos] = velocity;
+}
+
+[numthreads(8, 8, 1)]
+void Divergence(uint3 id : SV_DispatchThreadID)
+{
+    // Check if we're within the simulation boundaries
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+
+    // Skip calculation for boundaries
+    if (IsBoundary(cell))
+    {
+        DivergenceTexture[cell] = 0.0;
+        return;
+    }
+
+    // Get velocity values from neighboring cells
+    float4 vL = VelocityTexture[cell - int2(1, 0)];
+    float4 vR = VelocityTexture[cell + int2(1, 0)];
+    float4 vB = VelocityTexture[cell - int2(0, 1)];
+    float4 vT = VelocityTexture[cell + int2(0, 1)];
+
+    // Apply boundary conditions - if neighbor is a boundary, use current cell's velocity
+    // but with reversed component normal to the boundary
+    float boundaryL = GetBoundaryMask(cell - int2(1, 0));
+    float boundaryR = GetBoundaryMask(cell + int2(1, 0));
+    float boundaryB = GetBoundaryMask(cell - int2(0, 1));
+    float boundaryT = GetBoundaryMask(cell + int2(0, 1));
+
+    // Apply boundary conditions with reflection
+    vL.x = lerp(vL.x, -vL.x, boundaryL);
+    vR.x = lerp(vR.x, -vR.x, boundaryR);
+    vB.y = lerp(vB.y, -vB.y, boundaryB);
+    vT.y = lerp(vT.y, -vT.y, boundaryT);
+
+    // Calculate divergence: div = ∂u/∂x + ∂v/∂y
+    // Using central differences: (vR.x - vL.x) / (2 * dx) + (vT.y - vB.y) / (2 * dy)
+    // Since we're using grid cells of size 1, the factor becomes 0.5
+    // The multiplication by inverseResolution accounts for grid scaling
+    float divergence = 0.5 * ((vR.x - vL.x) + (vT.y - vB.y)) * length(inverseResolution);
+
+    // Store the divergence value
+    DivergenceTexture[cell] = divergence;
+}
+
+[numthreads(8, 8, 1)]
+void PressureDelta(uint3 id : SV_DispatchThreadID)
+{
+    // Check if we're within grid bounds
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+
+    // Skip calculation for boundary cells
+    if (IsBoundary(cell))
+        return;
+
+    // Sample pressure at neighboring cells
+    float pL = PressureTexture[cell - int2(1, 0)];
+    float pR = PressureTexture[cell + int2(1, 0)];
+    float pB = PressureTexture[cell - int2(0, 1)];
+    float pT = PressureTexture[cell + int2(0, 1)];
+
+    // Get current velocity
+    float4 velocity = VelocityTexture[cell];
+
+    // Handle boundaries - use pressure at boundary for pressure gradient calculation
+    float boundaryL = GetBoundaryMask(cell - int2(1, 0));
+    float boundaryR = GetBoundaryMask(cell + int2(1, 0));
+    float boundaryB = GetBoundaryMask(cell - int2(0, 1));
+    float boundaryT = GetBoundaryMask(cell + int2(0, 1));
+
+    // If neighbor is a boundary, use cell's pressure instead of neighbor's
+    pL = lerp(pL, PressureTexture[cell], boundaryL);
+    pR = lerp(pR, PressureTexture[cell], boundaryR);
+    pB = lerp(pB, PressureTexture[cell], boundaryB);
+    pT = lerp(pT, PressureTexture[cell], boundaryT);
+
+    // Calculate pressure gradient and subtract from velocity
+    // The scale factor 0.5 / grid scale is represented by inverseResolution * pressureScalar
+    float2 pressureGradient = float2(pR - pL, pT - pB) * inverseResolution * pressureScalar;
+
+    // Subtract gradient from velocity (projection step)
+    velocity.xy -= pressureGradient;
+
+    // Apply max velocity constraint
+    velocity.xy = Normalize(velocity.xy) * min(length(velocity.xy), maxVelocity);
+
+    // Write back to velocity texture
+    VelocityTexture[cell] = velocity;
+}
+
+// Each thread processes a block of cells
+#ifndef CELLS_PER_THREAD_X
+#define CELLS_PER_THREAD_X 2
+#endif
+
+#ifndef CELLS_PER_THREAD_Y
+#define CELLS_PER_THREAD_Y 2
+#endif
+
+[numthreads(8, 8, 1)]
+void PressureSolve(uint3 id : SV_DispatchThreadID)
+{
+    // Calculate base cell coordinates for this thread
+    uint blockStartX = id.x * CELLS_PER_THREAD_X;
+    uint blockStartY = id.y * CELLS_PER_THREAD_Y;
+
+    // Process a block of cells
+    for (uint cellY = 0; cellY < CELLS_PER_THREAD_Y; cellY++)
+    {
+        for (uint cellX = 0; cellX < CELLS_PER_THREAD_X; cellX++)
+        {
+            int2 cell = int2(blockStartX + cellX, blockStartY + cellY);
+
+            // Skip if outside resolution bounds
+            if (cell.x >= resolution.x || cell.y >= resolution.y)
+                continue;
+
+            // Skip boundary cells and set to zero
+            if (IsBoundary(cell))
+            {
+                PressureTexture[cell] = 0;
+                continue;
+            }
+
+            // Get neighboring pressure values
+            float pL = PressureTexturePrev[int2(cell.x - 1, cell.y)];
+            float pR = PressureTexturePrev[int2(cell.x + 1, cell.y)];
+            float pB = PressureTexturePrev[int2(cell.x, cell.y - 1)];
+            float pT = PressureTexturePrev[int2(cell.x, cell.y + 1)];
+
+            // Get divergence at current cell
+            float bC = DivergenceTexture[cell];
+
+            // Apply boundary conditions - use zero pressure for boundaries
+            float bMaskL = 1.0 - GetBoundaryMask(int2(cell.x - 1, cell.y));
+            float bMaskR = 1.0 - GetBoundaryMask(int2(cell.x + 1, cell.y));
+            float bMaskB = 1.0 - GetBoundaryMask(int2(cell.x, cell.y - 1));
+            float bMaskT = 1.0 - GetBoundaryMask(int2(cell.x, cell.y + 1));
+
+            // Apply Jacobi iteration (similar to the fragment shader example)
+            float pressureValue = (bMaskL * pL +
+                bMaskR * pR +
+                bMaskB * pB +
+                bMaskT * pT +
+                pressureCoeff * bC) * 0.25;
+
+            // Scale by pressureScalar (allows for tuning the pressure strength)
+            pressureValue *= pressureScalar;
+
+            // Store result in pressure texture
+            PressureTexture[cell] = pressureValue;
+        }
+    }
+}
+
+[numthreads(8, 8, 1)]
+void Visualization(uint3 id : SV_DispatchThreadID)
+{
+    // Skip if out of bounds
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    // Get velocity at current cell
+    float2 velocity = VelocityTexture[id.xy].xy;
+
+    // Calculate velocity magnitude (normalized between 0 and 1)
+    float magnitude = length(velocity) / maxVelocity;
+    magnitude = saturate(magnitude); // Clamp between 0 and 1
+
+    // Convert velocity direction to hue (0-1)
+    float angle = atan2(velocity.y, velocity.x) / (2.0 * 3.14159265) + 0.5;
+
+    // HSV to RGB conversion for direction
+    float h = angle;
+    float s = 1.0;
+    float v = magnitude;
+
+    // HSV to RGB conversion
+    float4 color;
+
+    float hi = floor(h * 6.0);
+    float f = h * 6.0 - hi;
+    float p = v * (1.0 - s);
+    float q = v * (1.0 - f * s);
+    float t = v * (1.0 - (1.0 - f) * s);
+
+    if (hi == 0.0 || hi == 6.0) color = float4(v, t, p, 1.0);
+    else if (hi == 1.0) color = float4(q, v, p, 1.0);
+    else if (hi == 2.0) color = float4(p, v, t, 1.0);
+    else if (hi == 3.0) color = float4(p, q, v, 1.0);
+    else if (hi == 4.0) color = float4(t, p, v, 1.0);
+    else color = float4(v, p, q, 1.0);
+
+    // Handle boundaries, sources, and sinks with distinct colors
+    if (IsBoundary(id.xy))
+    {
+        color = float4(0.2, 0.2, 0.4, 1.0); // Dark blue for boundaries
+    }
+    else if (IsSource(id.xy))
+    {
+        float strength = GetSourceMask(id.xy);
+        color = float4(0.0, strength, 0.0, 1.0); // Green for sources, intensity based on strength
+    }
+    else if (IsSink(id.xy))
+    {
+        float strength = GetSinkMask(id.xy);
+        color = float4(strength, 0.0, 0.0, 1.0); // Red for sinks, intensity based on strength
+    }
+
+    // Write final color to visualization texture
+    VisualizationTexture[id.xy] = color;
+}

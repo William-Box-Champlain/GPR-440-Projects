@@ -66,5 +66,5 @@ void GenerateTexture(uint3 id : SV_DispatchThreadID)
         if ((inMesh = PointInTriangle(position, a, b, c)) ? true : false)
             break;
     }
-    Output[id.xy] = inMesh ? float4(0, 0, 1, 0) : float4(0, 0, 0, 1);
+    Output[id.xy] = inMesh ? float4(0, 0, 0, 1) : float4(0, 0, 1, 0);
 }

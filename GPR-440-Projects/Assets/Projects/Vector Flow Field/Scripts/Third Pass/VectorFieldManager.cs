@@ -186,7 +186,7 @@ public class VectorFieldManager : MonoBehaviour
         accumulatedTime += Time.unscaledDeltaTime;
         if (frameRate <= 10 && accumulatedTime >= 5.0f && emergencyExit)
         {
-            EditorApplication.ExitPlaymode();
+            //EditorApplication.ExitPlaymode();
         }
     }
     // Create a simple boundary texture if none is provided
