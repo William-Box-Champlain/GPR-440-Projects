@@ -76,13 +76,6 @@ namespace fourth
             // Initialize the VFF system
             InitializeVectorFlowField();
 
-            VelocityTexture = vffInterface.GetRenderBuffer(vffInterface.renderNames[0]);
-            VelocityTexturePrev = vffInterface.GetRenderBuffer(vffInterface.renderNames[1]);
-            PressureTexture = vffInterface.GetRenderBuffer(vffInterface.renderNames[2]);
-            PressureTexturePrev = vffInterface.GetRenderBuffer(vffInterface.renderNames[3]);
-            DivergenceTexture = vffInterface.GetRenderBuffer(vffInterface.renderNames[4]);
-            BoundaryTexture = vffInterface.GetRenderBuffer(vffInterface.renderNames[5]);
-            VisualizationTexture = vffInterface.GetRenderBuffer(vffInterface.renderNames[6]);
         }
 
         void Update()

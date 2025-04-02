@@ -89,6 +89,7 @@
     <None Include="Assets\PolygonPrototype\Shaders\Prototype_Object.shader" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\BoundsCalculator.compute" />
     <None Include="Assets\PolygonPrototype\Shaders\Prototype_Global.shader" />
+    <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\FlowField.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\First Pass\NavierStokes.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\First Pass\Grid.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\ShaderHelpers.compute" />
@@ -96,6 +97,7 @@
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\NavierStokesSolver.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\BoundsCalculator_Optimized.compute" />
     <None Include="Assets\PolygonPrototype\Shaders\Prototype_Glass_Object.shader" />
+    <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\DensityAdvection.compute" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">

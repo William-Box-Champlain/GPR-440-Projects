@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml.Linq;
 using UnityEngine;
 
 public enum eParameters : int
@@ -28,6 +29,7 @@ namespace fourth
             "PressureSolve",
             "PressureDelta",
             "Visualization",
+            "DensityAdvection", // NEW: Kernel for density advection
         };
         public string[] renderNames =
             {
@@ -38,7 +40,9 @@ namespace fourth
             "DivergenceTexture",
             "BoundaryTexture",
             "VisualizationTexture",
-            "BoundaryAndInfluenceTexture"
+            "BoundaryAndInfluenceTexture",
+            "DensityTexture",       // NEW: Texture for fluid density
+            "DensityTexturePrev"    // NEW: Texture for previous density state
         };
         private string[] simulationParameters =
         {
@@ -49,8 +53,11 @@ namespace fourth
         "viscosityCoeff",
         "pressureCoeff",
         "iterationCount",
-        "inverseResolution"
-    };
+        "inverseResolution",
+        "densityDissipation",   // NEW: Density dissipation parameter
+        "densityToVelocity",    // NEW: Density to velocity influence parameter
+        "baseDensity"           // NEW: Base density parameter
+        };
 
         private ComputeShader VFFCalculator;
         private Dictionary<string, RenderTexture> renderTextures;
@@ -80,6 +87,7 @@ namespace fourth
             GetKernelIDs();
             SetParameters();
             InitializeVelocityField();
+            InitializeDensityField();
             BindAllTexturesToAllKernels();
             this.influences = influences;
             this.activeInfluences = new List<FlowFieldInfluence>();
@@ -87,8 +95,56 @@ namespace fourth
 
         public void Update(float deltaTime)
         {
-            RunSimulation(deltaTime);
+            if (VFFCalculator == null)
+            {
+                Debug.LogWarning("Compute Shader not set!");
+                return;
+            }
+
+            try
+            {
+                VFFCalculator.SetFloat("deltaTime", deltaTime);
+                ApplyInfluences();
+                DispatchAllKernels();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Error during simulation: {ex.Message}");
+            }
         }
+
+        public void UpdatePathfinding(int propagationIterations = 10)
+        {
+            // First generate cost field
+            GenerateCostField();
+
+            for (int i = 0; i < propagationIterations; i++)
+            {
+                VFFCalculator.SetInt("iterationCount", i);
+                EasyDispatch(kernels["SourcePressureDiffusion"]);
+            }
+
+            // Run integration field with sequential iterations
+            for (int i = 0; i < propagationIterations; i++)
+            {
+                VFFCalculator.SetInt("iterationCount", i);
+                EasyDispatch(kernels["IntegrationField"]);
+            }
+
+            // Generate the flow field based on the integration field
+            GeneratePathFlowField();
+        }
+
+        public void GenerateCostField()
+        {
+            EasyDispatch(kernels["CostField"]);
+        }
+
+        public void GeneratePathFlowField()
+        {
+            EasyDispatch(kernels["PathflowField"]);
+        }
+
         #region Private Simulation Functions
         private void RunSimulation(float deltaTime)
         {
@@ -422,12 +478,55 @@ namespace fourth
                 renderTextures = new Dictionary<string, RenderTexture>();
                 foreach (var kernel in renderNames)
                 {
-                    RenderTextureFormat format = (kernel == "PressureTexture" || kernel == "PressureTexturePrev" || kernel == "DivergenceTexture") ? RenderTextureFormat.RFloat : RenderTextureFormat.ARGBFloat;
+                    // NEW: Modified to include density textures as RFloat format
+                    RenderTextureFormat format = (kernel == "PressureTexture" ||
+                                                kernel == "PressureTexturePrev" ||
+                                                kernel == "DivergenceTexture" ||
+                                                kernel == "DensityTexture" ||
+                                                kernel == "DensityTexturePrev")
+                                                ? RenderTextureFormat.RFloat
+                                                : RenderTextureFormat.ARGBFloat;
                     renderTextures.Add(kernel, CreateRenderTexture(format));
                 }
                 cachedResolution = parameters.resolution;
             }
         }
+
+        private void InitializeDensityField()
+        {
+            // Create a texture with the base density value everywhere except boundaries
+            Texture2D tempTexture = new Texture2D(
+                (int)parameters.resolution.x,
+                (int)parameters.resolution.y,
+                TextureFormat.RFloat,
+                false);
+
+            // Set base density (1.0) for all cells
+            for (int x = 0; x < parameters.resolution.x; x++)
+            {
+                for (int y = 0; y < parameters.resolution.y; y++)
+                {
+                    // Read the boundary texture pixel to check for boundaries
+                    Color boundary = Color.black;
+                    RenderTexture.active = renderTextures["BoundaryTexture"];
+                    tempTexture.ReadPixels(new Rect(x, y, 1, 1), 0, 0);
+                    boundary = tempTexture.GetPixel(0, 0);
+                    RenderTexture.active = null;
+
+                    // Set zero density at boundaries, base density elsewhere
+                    float density = boundary.b > 0.01f ? 0.0f : 1.0f;
+                    tempTexture.SetPixel(x, y, new Color(density, 0, 0, 0));
+                }
+            }
+            tempTexture.Apply();
+
+            // Copy to density textures
+            Graphics.Blit(tempTexture, renderTextures["DensityTexture"]);
+            Graphics.Blit(tempTexture, renderTextures["DensityTexturePrev"]);
+
+            UnityEngine.Object.Destroy(tempTexture);
+        }
+
         private RenderTexture CreateRenderTexture(RenderTextureFormat format)
         {
             RenderTexture newTex = new RenderTexture((int)this.parameters.resolution.x, (int)this.parameters.resolution.y, 0, format);
@@ -494,6 +593,11 @@ namespace fourth
             VFFCalculator.SetFloat("viscosityCoeff", parameters.viscosityCoeff);
             VFFCalculator.SetFloat("pressureCoeff", parameters.pressureCoeff);
             VFFCalculator.SetInt("iterationCount", parameters.iterationCount);
+
+            // NEW: Set density-related parameters (using default values if not specified)
+            VFFCalculator.SetFloat("densityDissipation", 0.99f);
+            VFFCalculator.SetFloat("densityToVelocity", 1.0f);
+            VFFCalculator.SetFloat("baseDensity", 1.0f);
         }
 
         public void SetBoundaryTexture(RenderTexture texture)
@@ -663,6 +767,17 @@ namespace fourth
             );
 
             return new Vector3(velocity.x, 0, velocity.y);
+        }
+
+        private void SwapDensityTextures()
+        {
+            RenderTexture temp = renderTextures["DensityTexture"];
+            renderTextures["DensityTexture"] = renderTextures["DensityTexturePrev"];
+            renderTextures["DensityTexturePrev"] = temp;
+
+            // Rebind the textures
+            BindTextureToAllKernels("DensityTexture", renderTextures["DensityTexture"]);
+            BindTextureToAllKernels("DensityTexturePrev", renderTextures["DensityTexturePrev"]);
         }
 
         public Vector2Int GetUV(Vector3 worldPosition)

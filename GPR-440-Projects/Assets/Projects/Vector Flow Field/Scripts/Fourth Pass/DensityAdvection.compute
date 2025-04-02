@@ -1,0 +1,150 @@
+﻿// DensityAdvection.compute
+// This file contains density-related functions for Vector Flow Field simulation
+
+//====================================
+// DENSITY SAMPLING FUNCTION
+//====================================
+
+// Helper function to sample density with bilinear interpolation
+float SampleDensity(float2 pos, RWTexture2D<float> densityTex, float2 resolution)
+{
+    // Get texture dimensions
+    float2 texSize;
+    densityTex.GetDimensions(texSize.x, texSize.y);
+
+    // Ensure position is within bounds
+    pos = clamp(pos, float2(0, 0), texSize - float2(1, 1));
+
+    // Get integer position and fraction
+    float2 i = floor(pos);
+    float2 f = pos - i;
+    int2 i00 = int2(i);
+    int2 i10 = i00 + int2(1, 0);
+    int2 i01 = i00 + int2(0, 1);
+    int2 i11 = i00 + int2(1, 1);
+
+    // Boundary handling (Using GetCellMask function from main shader)
+    // This assumes the following function exists in the main shader:
+    // float GetCellMask(int2 cell) { return step(THRESHOLD, BoundaryTexture[cell].a); }
+    float i00Mask = GetCellMask(i00);
+    float i10Mask = GetCellMask(i10);
+    float i01Mask = GetCellMask(i01);
+    float i11Mask = GetCellMask(i11);
+
+    // Sample densities with boundary conditions
+    float d00 = i00Mask * densityTex[i00];
+    float d10 = i10Mask * densityTex[i10];
+    float d01 = i01Mask * densityTex[i01];
+    float d11 = i11Mask * densityTex[i11];
+
+    // Bilinear interpolation
+    return lerp(lerp(d00, d10, f.x), lerp(d01, d11, f.x), f.y);
+}
+
+//====================================
+// DENSITY ADVECTION KERNEL
+//====================================
+
+// Advect density through the velocity field
+void DensityAdvectionFunc(uint3 id,
+    RWTexture2D<float> DensityTexture,
+    RWTexture2D<float> DensityTexturePrev,
+    RWTexture2D<float4> VelocityTexture,
+    RWTexture2D<float4> BoundaryTexture,
+    float deltaTime,
+    float2 inverseResolution,
+    float densityDissipation,
+    float maxSinkSourceStrength,
+    float2 resolution)
+{
+    if (!WithinAbsoluteBounds(id.xy, resolution))
+        return;
+
+    int2 cell = int2(id.xy);
+    float2 position = float2(cell)+0.5; // Centers the position on cell
+
+    // Skip if not a cell (assuming these functions exist in main shader)
+    if (!IsCell(cell))
+    {
+        if (IsBoundary(cell))
+        {
+            DensityTexturePrev[cell] = 0;
+        }
+        return;
+    }
+
+    float2 velocity = VelocityTexture[cell].xy;
+
+    // Back-trace position using velocity field
+    float2 backTracedPosition = position - velocity * deltaTime * inverseResolution;
+
+    // Sample previous density at back-traced position
+    float newDensity = SampleDensity(backTracedPosition, DensityTexture, resolution);
+
+    // Apply dissipation
+    newDensity *= densityDissipation;
+
+    // Apply source/sink contributions (assuming these functions exist in main shader)
+    float sourceMask = GetSourceMask(cell);
+    float sinkMask = GetSinkMask(cell);
+
+    // Sources add density, sinks remove it
+    newDensity += sourceMask * maxSinkSourceStrength * deltaTime;
+    newDensity = max(0.0, newDensity - sinkMask * maxSinkSourceStrength * deltaTime);
+
+    // Store new density
+    DensityTexturePrev[cell] = newDensity;
+}
+
+//====================================
+// DENSITY-BASED DIVERGENCE MODIFIER
+//====================================
+
+// Modify divergence calculation to account for density changes
+float CalculateDensityAwareDivergence(float standardDivergence,
+    int2 cell,
+    RWTexture2D<float> DensityTexture,
+    float maxSinkSourceStrength)
+{
+    // Calculate density rate of change (∂ρ/∂t)
+    float sourceMask = GetSourceMask(cell);
+    float sinkMask = GetSinkMask(cell);
+    float densityChange = sourceMask * maxSinkSourceStrength - sinkMask * maxSinkSourceStrength;
+
+    // Modify divergence to account for density changes (∇·u = (1/ρ)(∂ρ/∂t))
+    float density = max(DensityTexture[cell], 0.01); // Avoid division by zero
+    float modifiedDivergence = standardDivergence - (densityChange / density);
+
+    return modifiedDivergence;
+}
+
+//====================================
+// DENSITY GRADIENT FORCE CALCULATOR
+//====================================
+
+// Calculate and apply forces based on density gradients
+float2 CalculateDensityGradientForce(int2 cell,
+    RWTexture2D<float> DensityTexture,
+    float densityToVelocity,
+    float2 resolution,
+    float deltaTime)
+{
+    // Get neighboring cells with clamping to ensure valid indices
+    int2 idxL = int2(max(0, cell.x - 1), cell.y);
+    int2 idxR = int2(min((int)resolution.x - 1, cell.x + 1), cell.y);
+    int2 idxB = int2(cell.x, max(0, cell.y - 1));
+    int2 idxT = int2(cell.x, min((int)resolution.y - 1, cell.y + 1));
+
+    // Sample density from neighbors
+    float dL = DensityTexture[idxL];
+    float dR = DensityTexture[idxR];
+    float dB = DensityTexture[idxB];
+    float dT = DensityTexture[idxT];
+
+    // Calculate density gradient
+    float2 densityGrad = float2(dR - dL, dT - dB) * 0.5 * densityToVelocity;
+
+    // Calculate force (negative gradient scaled by deltaTime)
+    // Fluids flow from high to low density
+    return -densityGrad * deltaTime;
+}

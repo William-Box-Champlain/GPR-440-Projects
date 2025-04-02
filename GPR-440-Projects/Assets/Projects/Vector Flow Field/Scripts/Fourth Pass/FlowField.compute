@@ -1,0 +1,421 @@
+#pragma kernel CostField                  // Replaces GenerateCostField
+#pragma kernel IntegrationField          // Replaces GenerateIntegrationField
+#pragma kernel PathflowField             // Replaces GenerateFlowField
+#pragma kernel SourcePressureDiffusion
+#pragma kernel VisualizeFlowField
+#pragma enable_d3d11_debug_symbols
+
+// Shared buffers with VFFCalculator
+RWTexture2D<float4> VelocityTexture;
+RWTexture2D<float4> VelocityTexturePrev;
+RWTexture2D<float> PressureTexture;      // Used to store cell costs
+RWTexture2D<float> PressureTexturePrev;  // Used to store best path costs
+RWTexture2D<float> DivergenceTexture;
+RWTexture2D<float4> BoundaryTexture;
+RWTexture2D<float4> VisualizationTexture;
+
+// Parameters
+float2 resolution;
+float4 bounds;
+float2 inverseResolution;
+float maxSinkSourceStrength;
+float deltaTime;
+float viscosityCoeff;
+float pressureCoeff;
+int iterationCount;
+
+//static consts
+
+// Constants for neighbor offsets
+static const int2 NEIGHBOR_OFFSETS[8] = {
+    int2(-1, -1), int2(-1, 0), int2(-1, 1), int2(0, 1),
+    int2(1, 1), int2(1, 0), int2(1, -1), int2(0, -1)
+};
+static const int OFFSET_COUNT = 8;
+
+static float4 CELL = float4(0, 0, 0, 1);
+static float4 BOUNDARY = float4(0, 0, 1, 0);
+static float4 SOURCE = float4(0, 1, 0, 0);
+static float4 SINK = float4(1, 0, 0, 0);
+static float EPSILON = 0.01;
+static float THRESHOLD = 0.001;
+
+static float CONSERVATION_RATE = 0.99;
+
+static float MAX_COST = 255.0;
+static float MAX_BEST_COST = 65535.0; // ushort.MaxValue
+static float NORMAL_COST = 1.0;         // Default cost for open cells
+static float BOUNDARY_COST = MAX_COST;  // Cost for boundary/impassable cells (255.0)
+
+// Helper functions adapted from VFFCalculator - all return 0 or 1 using step function, and so should return 1 when cell IS of type being tested.
+float GetCellMask(int2 cell)
+{
+    return step(THRESHOLD, BoundaryTexture[cell].a);
+}
+
+float GetBoundaryMask(int2 cell)
+{
+    return step(THRESHOLD, BoundaryTexture[cell].b);
+}
+
+float GetSourceMask(int2 cell)
+{
+    return step(THRESHOLD, BoundaryTexture[cell].g);
+}
+
+float GetSinkMask(int2 cell)
+{
+    return step(THRESHOLD, BoundaryTexture[cell].r);
+}
+
+float GetAbsoluteBoundsMask(int2 cell) //Slight difference, returns 1 when WITHIN absolute bounds.
+{
+    int xMask = step(0, cell.x) * step(cell.x, resolution.x - 1); 
+    int yMask = step(0, cell.y) * step(cell.y, resolution.y - 1);
+
+    return xMask * yMask;
+}
+
+bool WithinAbsoluteBounds(uint2 id)
+{
+    return (id.x < (uint)resolution.x && id.y < (uint)resolution.y);
+}
+
+bool MaskToBool(float mask)
+{
+    return step(1.0,mask) == 1 ? true : false;
+}
+
+// Updates the visualization texture based on a flow vector
+void UpdateVisualizationTexture(int2 cell, float2 flowDir)
+{
+    // Calculate angle and magnitude for HSV color mapping
+    float angle = atan2(flowDir.y, flowDir.x) / (3.14159 * 2) + 0.5;
+    float magnitude = length(flowDir);
+
+    // HSV to RGB for visualization
+    float h = angle * 6.0;
+    float s = 0.7;
+    float v = magnitude;
+
+    float c = v * s;
+    float x = c * (1.0 - abs(fmod(h, 2.0) - 1.0));
+    float m = v - c;
+
+    float3 rgb;
+    if (h < 1.0) rgb = float3(c, x, 0);
+    else if (h < 2.0) rgb = float3(x, c, 0);
+    else if (h < 3.0) rgb = float3(0, c, x);
+    else if (h < 4.0) rgb = float3(0, x, c);
+    else if (h < 5.0) rgb = float3(x, 0, c);
+    else rgb = float3(c, 0, x);
+
+    VisualizationTexture[cell] = float4(rgb + m, 1.0);
+}
+
+// Get neighbors for a cell
+void GetNeighbors(int2 cellIdx, out int2 neighbors[8], out int neighborCount)
+{
+    neighborCount = 0;
+    
+    // Loop through all pre-defined neighbor directions
+    for (int i = 0; i < OFFSET_COUNT; i++) {
+        int2 neighborIdx = cellIdx + NEIGHBOR_OFFSETS[i];
+        
+        // Check if neighbor is within bounds (using masking for better performance)
+        float xInBounds = step(0, neighborIdx.x) * step(neighborIdx.x, resolution.x - 1);
+        float yInBounds = step(0, neighborIdx.y) * step(neighborIdx.y, resolution.y - 1);
+        float isInBounds = xInBounds * yInBounds;
+        
+        // Check if neighbor is not a boundary (only matters if it's in bounds)
+        float isNotBoundary = 1.0 - GetBoundaryMask(neighborIdx);
+        
+        // Only include neighbors that are both in bounds and not boundaries
+        // Multiplying by isInBounds ensures we don't use invalid texture reads
+        float isValidNeighbor = isInBounds * isNotBoundary;
+        
+        // Add to neighbors array only if valid
+        neighbors[neighborCount] = neighborIdx;
+        neighborCount += (int)isValidNeighbor;
+    }
+}
+
+// Calculate cell velocity based on direction - simplified version
+float2 CalculateCellVelocity(int2 currentCellIdx, int2 neighborCellIdx)
+{
+    // Calculate the direction vector
+    int2 diff = neighborCellIdx - currentCellIdx;
+    
+    // Convert to float2 and normalize
+    // This creates a unit vector pointing from current cell to neighbor
+    float2 cellVelocity = normalize(float2(diff.x, diff.y));
+    
+    return cellVelocity;
+}
+
+// Kernel 1: Generate Cost Field
+[numthreads(8, 8, 1)]
+void CostField(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+    
+    int2 cell = int2(id.xy);
+    
+    // Default cost is 1 (base movement cost for all cells)
+    float cost = 1.0;
+    
+    // Use boundary information from BoundaryTexture
+    float boundaryMask = GetBoundaryMask(cell);
+    
+    // If cell is a boundary (impassable), set cost to max
+    cost = lerp(cost, MAX_COST, boundaryMask);
+    
+    // Check for source cells - add extra cost to make them less attractive to path through
+    // The source strength only affects the initial cell, not the neighboring cells
+    float sourceMask = GetSourceMask(cell);
+    float sourceStrength = BoundaryTexture[cell].g * maxSinkSourceStrength;
+    
+    // Add source strength as an additional cost factor rather than replacing the cost
+    // This allows for cost propagation to work normally while making source cells less desirable
+    cost = lerp(cost, cost + sourceStrength * pressureCoeff, sourceMask);
+    
+    // Store the cost in PressureTexture
+    // We're repurposing PressureTexture to store cell costs
+    PressureTexture[cell] = cost;
+    
+    // Initialize PressureTexturePrev to max value
+    // We're repurposing PressureTexturePrev to store best path costs
+    PressureTexturePrev[cell] = MAX_BEST_COST;
+}
+
+[numthreads(8, 8, 1)]
+void IntegrationField(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+
+    // Check if this is the first pass
+    if (iterationCount == 0) {
+        // Initialize PressureTexturePrev again (in case CostField wasn't called)
+        // And handle sink cells using masking instead of branching
+        float sinkMask = GetSinkMask(cell);
+
+        // For pathfinding to work correctly, ALL sinks must have better (lower) values
+        // than non-sink cells, regardless of their strength
+        // Set a maximum sink value that's significantly better than any regular cell
+        float maxSinkValue = MAX_BEST_COST * 0.5; // Half of max cost is still better than any propagated cost
+
+        // Then scale within the range [0, maxSinkValue] based on sink strength
+        // This ensures even the weakest sink is more attractive than any non-sink
+        float sinkValue = lerp(maxSinkValue, 0.0, BoundaryTexture[cell].r);
+
+        // Set default value to MAX_BEST_COST, but use sinkValue for sink cells
+        PressureTexturePrev[cell] = lerp(MAX_BEST_COST, sinkValue, sinkMask);
+
+        // Clear velocity at destination cells
+        float4 tempVel = VelocityTexture[cell];
+        VelocityTexture[cell] = lerp(tempVel, float4(0, 0, 0, 0), sinkMask);
+
+        return;
+    }
+
+    // Special diffusion phase for source pressure - only for the second pass (id.z == 1)
+    // This creates a pressure field around sources that diminishes with distance
+    if (iterationCount == 1) {
+        // Skip if cell is a boundary or already a source
+        float boundaryMask = GetBoundaryMask(cell);
+        float sourceMask = GetSourceMask(cell);
+        if (boundaryMask + sourceMask >= 1.0)
+            return;
+
+        // Get neighbors and check if any are sources
+        float totalSourceInfluence = 0.0;
+        int2 neighbors[8];
+        int neighborCount;
+        GetNeighbors(cell, neighbors, neighborCount);
+
+        // Calculate source influence from neighbors
+        for (int i = 0; i < neighborCount; i++) {
+            float neighborSourceMask = GetSourceMask(neighbors[i]);
+            if (neighborSourceMask > 0.5) {
+                // Get source strength and normalize by distance
+                float sourceStrength = BoundaryTexture[neighbors[i]].g * maxSinkSourceStrength;
+
+                // Calculate distance (1 for direct neighbors, ~1.414 for diagonals)
+                float2 diff = float2(neighbors[i] - cell);
+                float distance = length(diff);
+
+                // Apply inverse-square falloff for pressure
+                float influence = sourceStrength * pressureCoeff / (distance * distance + 1.0);
+                totalSourceInfluence += influence;
+            }
+        }
+
+        // Add source influence to existing cost
+        PressureTexture[cell] += totalSourceInfluence;
+        return;
+    }
+
+    // Skip if cell is impassable (uses masking instead of early return)
+    float costMask = step(BOUNDARY_COST - 0.1, PressureTexture[cell]);
+    // If costMask = 1, cell is impassable
+    // We'll continue execution but make calculations have no effect when costMask = 1
+
+    // Get neighbors
+    int2 neighbors[8];
+    int neighborCount;
+    GetNeighbors(cell, neighbors, neighborCount);
+
+    // Get current best cost
+    float currentBestCost = PressureTexturePrev[cell];
+
+    // Check all neighbors
+    for (int i = 0; i < neighborCount; i++) {
+        float neighborCost = PressureTexture[neighbors[i]];
+        float neighborBestCost = PressureTexturePrev[neighbors[i]];
+
+        // Calculate potential new cost
+        float newCost = neighborBestCost + PressureTexture[cell];
+
+        // Update if better
+        currentBestCost = min(currentBestCost, newCost);
+    }
+
+    // Update best cost - only if cell is passable
+    float passableMask = 1.0 - costMask; // 1 if passable, 0 if impassable
+    float newBestCost = lerp(currentBestCost, PressureTexturePrev[cell], costMask);
+    PressureTexturePrev[cell] = newBestCost;
+}
+
+// Kernel 3: Generate Flow Field
+[numthreads(8, 8, 1)]
+void PathflowField(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+    
+    int2 cell = int2(id.xy);
+    
+    // Check if cell is a boundary, impassable, or sink
+    float boundaryMask = GetBoundaryMask(cell);
+    float costMask = step(BOUNDARY_COST - 0.1, PressureTexture[cell]);
+    float sinkMask = GetSinkMask(cell);
+    float skipMask = max(max(boundaryMask, costMask), sinkMask);
+    
+    // Instead of returning early, we'll use the skipMask to control whether
+    // calculations have an effect (1 = skip, 0 = process)
+    
+    // Get the current cell's best cost
+    float currentBestCost = PressureTexturePrev[cell];
+    
+    // Get neighbors
+    int2 neighbors[8];
+    int neighborCount;
+    GetNeighbors(cell, neighbors, neighborCount);
+    
+    // Find the neighbor with lowest cost
+    float lowestCost = currentBestCost;
+    int2 bestNeighbor = cell; // Default to self
+    
+    // Only process if we're not supposed to skip
+    float processCell = 1.0 - skipMask; // 1 = process, 0 = skip
+    
+    for (int i = 0; i < neighborCount; i++) {
+        float neighborCost = PressureTexturePrev[neighbors[i]];
+        
+        // Mask-based approach instead of if statement
+        // When neighborCost < lowestCost, shouldUpdate = 1, else 0
+        float shouldUpdate = step(neighborCost, lowestCost - EPSILON);
+        
+        // Update values only if shouldUpdate is 1
+        lowestCost = lerp(lowestCost, neighborCost, shouldUpdate);
+        // Using int2 lerp is tricky, here's a safer approach:
+        bestNeighbor = (shouldUpdate > 0.5) ? neighbors[i] : bestNeighbor;
+    }
+    
+    // Calculate flow direction
+    float2 flowDir = float2(0, 0);
+    
+    // Compare bestNeighbor with cell to see if we found a better path
+    float hasBetterNeighbor = max(
+        step(abs(bestNeighbor.x - cell.x), 0.5) * step(0.5, abs(bestNeighbor.y - cell.y)),  // Different in y
+        step(0.5, abs(bestNeighbor.x - cell.x)) * step(abs(bestNeighbor.y - cell.y), 0.5)   // Different in x
+    );
+    
+    // Only calculate flow if we have a better neighbor
+    flowDir = CalculateCellVelocity(cell, bestNeighbor) * hasBetterNeighbor;
+    
+    // Update velocity field, but only if we're processing this cell
+    float4 currentVelocity = VelocityTexture[cell];
+    float4 newVelocity = float4(flowDir, 0, 0);
+    VelocityTexture[cell] = lerp(currentVelocity, newVelocity, processCell);
+    
+    // Update visualization texture 
+    UpdateVisualizationTexture(cell, flowDir);
+}
+
+[numthreads(8, 8, 1)]
+void VisualizeFlowField(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+
+    // Sample the velocity field
+    float2 flowDir = VelocityTexture[cell].xy;
+
+    // Use the same visualization logic we have in the function
+    UpdateVisualizationTexture(cell, flowDir);
+}
+
+[numthreads(8, 8, 1)]
+void SourcePressureDiffusion(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+
+    // Skip boundaries and sources (their pressure remains fixed)
+    if (MaskToBool(GetBoundaryMask(cell)) || MaskToBool(GetSourceMask(cell)))
+        return;
+
+    // Sample neighboring cells
+    float neighborSum = 0.0;
+    int neighborCount = 0;
+
+    float evenMask = (float)((uint)iterationCount % (uint)2);
+    float oddMask = (1.0 - evenMask);
+
+    // Sample 4-connected neighbors (or could use 8-connected with NEIGHBOR_OFFSETS)
+    int2 offsets[4] = { int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
+
+    for (int i = 0; i < 4; i++) {
+        int2 neighborPos = cell + offsets[i];
+        
+        // Only consider non-boundary cells for diffusion
+        float neighborAbsoluteBoundaryMask = GetAbsoluteBoundsMask(neighborPos);
+        float notABoundary = (1.0 - GetBoundaryMask(neighborPos));
+
+        neighborSum += (PressureTexture[neighborPos] * notABoundary * oddMask + PressureTexturePrev[neighborPos] * notABoundary * evenMask) * neighborAbsoluteBoundaryMask;
+        neighborCount += (int)notABoundary;
+    }
+
+    // Calculate diffused pressure
+    float currentPressure = (PressureTexture[cell] * oddMask + PressureTexturePrev[cell] * evenMask);
+    float neighborAverage = (neighborCount > 0) ? neighborSum / neighborCount : currentPressure;
+
+    // Apply diffusion equation: lerp between current value and neighbor average
+    float diffusedPressure = lerp(currentPressure, neighborAverage, viscosityCoeff);
+
+    // Apply dissipation to gradually reduce pressure over time
+    diffusedPressure *= CONSERVATION_RATE;
+
+    // Store result in prev texture for ping-pong buffer approach
+    PressureTexture[cell] = diffusedPressure * oddMask + PressureTexture[cell] * evenMask;
+    PressureTexturePrev[cell] = diffusedPressure * evenMask + PressureTexturePrev[cell] * oddMask;
+}
