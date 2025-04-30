@@ -124,20 +124,21 @@ public class FlowFieldManager : MonoBehaviour
         mLevelMasks.Clear();
         foreach (var data in mNavMeshes)
         {
-            RenderTexture temp = mGridGenerator.GenerateTexture(data);
+            RenderTexture tempText = mGridGenerator.GenerateTexture(data);
             mGridGenerator.UpdateSinks(mSinkObjects, data);
-            TransferGridToNavierStokes(temp);
-            mLevelMasks.Add(temp);
-            //mNavierStokesManager.UpdateSimulation(dt, data);
-            //RenderTexture temp;
-            //if (mNavierStokesManager.TryGetRenderTexture(data, out temp))
-            //{
-            //    bool added = mFlowFields.TryAdd(data, temp);
-            //    if (!added)
-            //    {
-            //        mFlowFields.Add(data, temp);
-            //    }
-            //}
+            TransferGridToNavierStokes(tempText);
+            mLevelMasks.Add(tempText);
+
+            mNavierStokesManager.UpdateSimulation(dt, data);
+
+            RenderTexture temp;
+            if (mNavierStokesManager.TryGetRenderTexture(data, out temp))
+            {
+                if (!mFlowFields.TryAdd(data, temp))
+                {
+                    mFlowFields.Add(data, temp);
+                }
+            }
         }
     }
 

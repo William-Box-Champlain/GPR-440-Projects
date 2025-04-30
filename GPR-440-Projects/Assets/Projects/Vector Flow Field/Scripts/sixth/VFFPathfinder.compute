@@ -1,0 +1,298 @@
+// VFF Pathfinding Compute Shader
+// Designed for large 2D environments (600x300 units)
+// Integrates with Unity NavMesh for boundary data
+
+#pragma kernel InitializeVectorField
+#pragma kernel GenerateDistanceField
+#pragma kernel PropagateDistanceField
+#pragma kernel ConvertToVectorField
+#pragma kernel CalculateAgentDirections
+
+// Structure definitions
+struct Goal {
+    float2 position;
+    float weight;
+    bool active;
+};
+
+struct NavMeshData {
+    float4 boundaryPoint;  // xyz = position, w = is boundary (1 or 0)
+};
+
+struct AgentDirectionData {
+    float2 position;
+    float2 direction;      // Normalized direction vector
+    float fieldStrength;   // Intensity of the field at this point
+};
+
+// Buffers and textures
+RWStructuredBuffer<Goal> GoalBuffer;
+RWStructuredBuffer<NavMeshData> NavMeshBuffer;
+RWStructuredBuffer<AgentDirectionData> AgentBuffer;
+RWTexture2D<float4> VectorField;         // RG = direction, B = field strength, A = obstacle influence
+RWTexture2D<float> DistanceField;        // Used in field propagation
+
+// Constants
+cbuffer Constants {
+    uint NumGoals;
+    uint NumAgents;
+    uint NavMeshDataSize;
+    uint GridWidth;
+    uint GridHeight;
+    float CellSize;        // Size of each grid cell in Unity units
+    float PropagationSpeed;
+    float FieldFalloff;
+    float ObstacleWeight;
+    float2 WorldOffset;    // World space offset of the grid origin
+};
+
+// Utility functions
+float2 WorldToGrid(float2 worldPos)
+{
+    return (worldPos - WorldOffset) / CellSize;
+}
+
+float2 GridToWorld(float2 gridPos)
+{
+    return gridPos * CellSize + WorldOffset;
+}
+
+bool IsValidGridPos(uint2 gridPos) {
+    return gridPos.x < GridWidth && gridPos.y < GridHeight;
+}
+
+// Sampling with bilinear interpolation
+float4 SampleVectorField(float2 gridPos) {
+    // Bilinear interpolation
+    float2 frac_part = frac(gridPos);
+    int2 grid_pos = int2(gridPos);
+    
+    float4 v00 = VectorField[uint2(grid_pos)];
+    float4 v10 = VectorField[uint2(grid_pos + uint2(1, 0))];
+    float4 v01 = VectorField[uint2(grid_pos + uint2(0, 1))];
+    float4 v11 = VectorField[uint2(grid_pos + uint2(1, 1))];
+    
+    float4 v0 = lerp(v00, v10, frac_part.x);
+    float4 v1 = lerp(v01, v11, frac_part.x);
+    
+    return lerp(v0, v1, frac_part.y);
+}
+
+// Initialize vector field with obstacles from NavMesh
+[numthreads(8, 8, 1)]
+void InitializeVectorField(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= GridWidth || id.y >= GridHeight)
+        return;
+        
+    // Initialize vector field to zero for all components
+    VectorField[id.xy] = float4(0, 0, 0, 0);
+    
+    // Initialize distance field to very high value (infinity proxy)
+    DistanceField[id.xy] = 999999.0f;
+    
+    // Convert grid position to world position
+    float2 worldPos = GridToWorld(float2(id.xy));
+    
+    // Check for obstacles from NavMesh data
+    for (uint i = 0; i < NavMeshDataSize; i++) {
+        NavMeshData data = NavMeshBuffer[i];
+        
+        // If this is a boundary point
+        if (data.boundaryPoint.w > 0.5f) {
+            float2 boundaryPos = data.boundaryPoint.xy;
+            float dist = distance(worldPos, boundaryPos);
+            
+            // If close to boundary, mark as obstacle with falloff
+            if (dist < ObstacleWeight * 2.0f) {
+                float influence = saturate(1.0f - dist / (ObstacleWeight * 2.0f));
+                // Read the current value first
+                float4 currentValue = VectorField[id.xy];
+                float newAlpha = max(currentValue.a, influence);
+                VectorField[id.xy] = float4(currentValue.r, currentValue.g, currentValue.b, newAlpha);
+            }
+        }
+    }
+}
+
+[numthreads(8, 8, 1)]
+void GenerateDistanceField(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= GridWidth || id.y >= GridHeight)
+        return;
+    
+    float currentDist = 999999.0f;
+    bool foundAnyGoal = false;
+    
+    for (uint i = 0; i < NumGoals; i++)
+    {
+        Goal goal = GoalBuffer[i];
+        
+        if (goal.active)
+        {
+            foundAnyGoal = true;
+            
+            float2 goalGridPos = WorldToGrid(goal.position);
+            
+            float dist = distance(float2(id.xy), goalGridPos);
+            
+            dist = log(dist + 1.0f);
+            
+            float obstacleInfluence = VectorField[id.xy].a;
+            float obstacleEffect = obstacleInfluence * ObstacleWeight;
+            
+            obstacleEffect = min(obstacleEffect, 10.0f);
+            dist += obstacleEffect;
+            
+            dist /= max(0.1f, goal.weight);
+            
+            currentDist = min(currentDist, dist);
+        }
+    }
+    
+    if (!foundAnyGoal) //assign a value pointing towards center of space.
+    {
+        float2 centerDir = float2(GridWidth / 2, GridHeight / 2) - float2(id.xy);
+        float distToCenter = length(centerDir);
+        currentDist = distToCenter * 0.1f;
+    }
+    
+    DistanceField[id.xy] = currentDist;
+}
+
+[numthreads(8, 8, 1)]
+void PropagateDistanceField(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= GridWidth || id.y >= GridHeight)
+        return;
+    
+    float currentDist = DistanceField[id.xy];
+    
+    // Check neighboring cells
+    float2 neighborOffsets[8] =
+    {
+        float2(-1, -1), float2(0, -1), float2(1, -1),
+        float2(-1, 0), float2(1, 0),
+        float2(-1, 1), float2(0, 1), float2(1, 1)
+    };
+    
+    // Only propagate if we're not very close to a goal
+    // This preserves the strong gradients near goals
+    if (currentDist > 1.0f)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            uint2 neighborPos = id.xy + uint2(neighborOffsets[i]);
+            
+            if (IsValidGridPos(neighborPos))
+            {
+                float neighborDist = DistanceField[neighborPos];
+                float distToNeighbor = length(neighborOffsets[i]);
+                
+                // Consider obstacle influence with diminishing returns
+                float neighborObstacle = VectorField[neighborPos].a;
+                float obstacleAddition = min(neighborObstacle * ObstacleWeight, 5.0f);
+                
+                // Compute propagated distance
+                float propagatedDist = neighborDist + distToNeighbor + obstacleAddition;
+                
+                // Apply propagation speed (lower = faster propagation)
+                propagatedDist *= PropagationSpeed;
+                
+                // Update if this path is shorter
+                currentDist = min(currentDist, propagatedDist);
+            }
+        }
+    }
+    
+    // Update the distance field
+    DistanceField[id.xy] = currentDist;
+}
+
+// Convert distance field to vector field
+[numthreads(8, 8, 1)]
+void ConvertToVectorField(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= GridWidth || id.y >= GridHeight)
+        return;
+    
+    float centerDist = DistanceField[id.xy];
+    
+    // Calculate gradient using central differences
+    float2 gradient = float2(0, 0);
+    
+    if (id.x > 0 && id.x < GridWidth - 1) {
+        gradient.x = DistanceField[uint2(id.x - 1, id.y)] - DistanceField[uint2(id.x + 1, id.y)];
+    }
+    
+    if (id.y > 0 && id.y < GridHeight - 1) {
+        gradient.y = DistanceField[uint2(id.x, id.y - 1)] - DistanceField[uint2(id.x, id.y + 1)];
+    }
+    
+    // Normalize gradient to get direction
+    float length = max(0.0001f, sqrt(gradient.x * gradient.x + gradient.y * gradient.y));
+    float2 direction = gradient / length;
+    
+    // Calculate field strength (inversely proportional to distance, with falloff)
+    float fieldStrength = exp(-centerDist * FieldFalloff);
+    
+    // Get existing obstacle value
+    float obstacleValue = VectorField[id.xy].a;
+    
+    // Update vector field (write to all components)
+    VectorField[id.xy] = float4(direction.x, direction.y, fieldStrength, obstacleValue);
+}
+
+// Calculate agent directions from the vector field
+[numthreads(64, 1, 1)]
+void CalculateAgentDirections(uint3 id : SV_DispatchThreadID) {
+    uint agentIndex = id.x;
+    if (agentIndex >= NumAgents)
+        return;
+    
+    // Get agent position
+    AgentDirectionData agent = AgentBuffer[agentIndex];
+    
+    // Convert to grid position
+    float2 gridPos = WorldToGrid(agent.position);
+    
+    // Check if agent is in grid bounds
+    if (gridPos.x >= 0 && gridPos.x < GridWidth-1 && 
+        gridPos.y >= 0 && gridPos.y < GridHeight-1) {
+        
+        // Sample the vector field
+        float4 fieldSample = SampleVectorField(gridPos);
+        
+        // Extract direction and field strength
+        float2 direction = float2(fieldSample.r, fieldSample.g);
+        float fieldStrength = fieldSample.b;
+        
+        // Handle zero direction case (no gradient)
+        if (length(direction) < 0.01f) {
+            // Find the nearest active goal
+            float minDist = 999999.0f;
+            float2 nearestGoalDir = float2(0, 0);
+            
+            for (uint i = 0; i < NumGoals; i++) {
+                if (GoalBuffer[i].active) {
+                    float2 goalDir = normalize(GoalBuffer[i].position - agent.position);
+                    float dist = distance(agent.position, GoalBuffer[i].position);
+                    
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearestGoalDir = goalDir;
+                    }
+                }
+            }
+            
+            // Use direction to nearest goal
+            if (minDist < 999999.0f) {
+                direction = nearestGoalDir;
+                fieldStrength = exp(-minDist * FieldFalloff);
+            }
+        }
+        
+        // Update agent direction data (write to all components)
+        agent.direction = direction;
+        agent.fieldStrength = fieldStrength;
+        AgentBuffer[agentIndex] = agent;
+    }
+}

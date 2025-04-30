@@ -26,6 +26,7 @@ namespace fourth
         [SerializeField] private float pressureCoefficient = 0.5f;
         [SerializeField] private int iterationCount = 20;
         [SerializeField] private bool visualizeField = false;
+        [SerializeField] private bool velocityVisualization = true;
 
         [Header("NavMesh Conversion")]
         [SerializeField] private float navMeshDetailLevel = 0.5f;
@@ -80,19 +81,20 @@ namespace fourth
 
         void Update()
         {
+            
+        }
+
+        private void LateUpdate()
+        {
             // Update the flow field simulation with proper time delta
-            vffInterface?.Update(Time.deltaTime);
+            vffInterface?.Update(Time.deltaTime, GetVFFParameters());
 
             // Visualize the flow field if enabled (for debugging)
             if (visualizeField)
             {
                 VisualizeFlowField();
             }
-        }
-
-        private void LateUpdate()
-        {
-            if(frameByFrame) Debug.Break();
+            if (frameByFrame) Debug.Break();
         }
 
         /// <summary>
@@ -309,7 +311,15 @@ namespace fourth
             // Update visualization texture if needed
             if (visualizationMaterial != null)
             {
-                Texture2D visualizationTexture = vffInterface.GetVisualization();
+                Texture2D visualizationTexture = null;
+                if (!velocityVisualization)
+                {
+                    visualizationTexture = vffInterface.GetPressureVisualization();
+                }
+                else if (velocityVisualization)
+                {
+                    visualizationTexture = vffInterface.GetVisualization();
+                }
                 if (visualizationTexture != null)
                 {
                     visualizationMaterial.mainTexture = visualizationTexture;

@@ -1,0 +1,102 @@
+// FluidSimulation.compute
+#pragma kernel Advection
+#pragma kernel Pressure
+#pragma kernel ApplyForces
+#pragma kernel UpdateDensity
+#pragma kernel Visualization
+#pragma enable_d3d11_debug_symbols
+
+#include "Constants.hlsl"
+#include "Helpers.hlsl"
+#include "Advection.hlsl"
+#include "Pressure.hlsl"
+#include "Forces.hlsl"
+#include "Density.hlsl"
+#include "Visualization.hlsl"
+
+// Textures
+RWTexture2D<float4> VelocityTexture;
+RWTexture2D<float4> VelocityTexturePrev;
+RWTexture2D<float> PressureTexture;
+RWTexture2D<float> PressureTexturePrev;
+RWTexture2D<float> DensityTexture;
+RWTexture2D<float> DensityTexturePrev;
+RWTexture2D<float4> BoundaryTexture;
+RWTexture2D<float4> VisualizationTexture;
+RWTexture2D<float4> BoundaryAndInfluenceTexture;
+
+// Parameters
+float maxSinkSourceStrength;
+float deltaTime;
+float2 resolution;
+float4 bounds;
+float viscosityCoeff;
+float pressureCoeff;
+int iterationCount;
+float2 inverseResolution; // calculated as resolution / bounds.xy 
+float densityDissipation = 0.99;
+float densityToVelocity = 1.0;
+float baseDensity = 1.0;
+
+// Constants
+static float4 CELL = float4(0, 0, 0, 1);
+static float4 BOUNDARY = float4(0, 0, 1, 0);
+static float4 SOURCE = float4(0, 1, 0, 0);
+static float4 SINK = float4(1, 0, 0, 0);
+static float EPSILON = 0.01;
+static float THRESHOLD = 0.01;
+static float DISSIPATION = 0.8;
+static float SPEED_OF_SOUND = 10.0; // Large value for fast pressure propagation
+static float MAX_VELOCITY = 5.0; // Maximum allowed velocity magnitude
+
+[numthreads(8, 8, 1)]
+void Advection(uint3 id : SV_DispatchThreadID) {
+    AdvectionStep(id, VelocityTexture, VelocityTexturePrev, 
+                  DensityTexture, DensityTexturePrev,
+                  BoundaryTexture, deltaTime, resolution,baseDensity);
+}
+
+[numthreads(8, 8, 1)]
+void Pressure(uint3 id : SV_DispatchThreadID) {
+    for(int i = 0; i < iterationCount; i++) {
+        int mod = i % 2;
+        if(mod == 0) { // even iterations
+            PressureStep(id, VelocityTexture, PressureTexture, PressureTexturePrev,
+                     DensityTexture, BoundaryTexture, deltaTime, resolution,
+                     pressureCoeff, i);
+        } else { // odd iterations
+            PressureStep(id, VelocityTexture, PressureTexturePrev, PressureTexture,
+                     DensityTexture, BoundaryTexture, deltaTime, resolution,
+                     pressureCoeff, i);
+        }
+        
+        // Add synchronization between iterations within a thread group
+        GroupMemoryBarrierWithGroupSync();
+    }
+    
+    // After all iterations, ensure the final result is in PressureTexture
+    if (iterationCount > 0 && iterationCount % 2 == 1) {
+        PressureTexture[id.xy] = PressureTexturePrev[id.xy];
+    }
+}
+
+[numthreads(8, 8, 1)]
+void ApplyForces(uint3 id : SV_DispatchThreadID) {
+    ApplyForcesStep(id, VelocityTexture, PressureTexture,
+                    DensityTexture, BoundaryTexture, 
+                    maxSinkSourceStrength, deltaTime, viscosityCoeff, resolution,
+                    densityToVelocity, baseDensity);
+}
+
+[numthreads(8, 8, 1)]
+void UpdateDensity(uint3 id : SV_DispatchThreadID) {
+    DensityStep(id, VelocityTexture, DensityTexture,
+                BoundaryTexture, deltaTime, densityDissipation, resolution, baseDensity);
+}
+
+[numthreads(8, 8, 1)]
+void Visualization(uint3 id : SV_DispatchThreadID) {
+    VisualizationStep(id, VelocityTexture, PressureTexture,
+                      DensityTexture, VisualizationTexture, resolution, 
+                      baseDensity);
+}

@@ -1,117 +1,202 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Xml.Schema;
 using UnityEngine;
 
-namespace GOAP
+public class GoapPlanner
 {
-    public interface IGoapPlanner
+    // Simple solution just for testing, not very smart
+    public List<Action> FastPlan(Beliefs worldState, Dictionary<string, bool> goal, List<Action> actions)
     {
-        ActionPlan Plan(GoapAgent agent, HashSet<Goal> goals, Goal mostRecentGoal = null);
-    }
-    public class GoapPlanner
-    {
-        public ActionPlan Plan(GoapAgent agent, HashSet<Goal> goals, Goal mostRecentGoal = null)
+        // First check if the world state already satisfies the goal
+        if (GoalsSatisfied(goal, worldState))
         {
-            List<Goal> orderedGoals = goals
-                .Where(goal => goal.EndState.Any(belief => !belief.Evaluate()))
-                .OrderByDescending(goal=> goal == mostRecentGoal ? goal.Priority - 0.01 : goal.Priority)
-                .ToList();
+            return new List<Action>();
+        }
+
+        // Try to find a plan using the AStar search algorithm
+        return AStarSearch(worldState, goal, actions);
+        
+        // If we can't find a plan, try the simpler approach
+        // return EasySearch(worldState, goal, actions);
+    }
+
+    // A* search algorithm for finding a plan
+    private List<Action> AStarSearch(Beliefs initialState, Dictionary<string, bool> goalState, List<Action> actions)
+    {
+        // Create a priority queue for the frontier
+        List<Node> frontier = new List<Node>();
+        
+        // Create the initial node
+        Node startNode = new Node();
+        startNode.beliefs = new Beliefs(initialState); // Clone initial state
+        startNode.cost = 0;
+        startNode.parent = null;
+        startNode.action = null;
+        
+        frontier.Add(startNode);
+        
+        // Keep track of visited states to avoid cycles
+        HashSet<string> visitedStates = new HashSet<string>();
+        
+        // While we have nodes to explore
+        while (frontier.Count > 0)
+        {
+            // Sort by cost and get the lowest cost node
+            frontier.Sort((a, b) => a.cost.CompareTo(b.cost));
+            Node current = frontier[0];
+            frontier.RemoveAt(0);
             
-            foreach(var goal in orderedGoals)
+            // Check if we've reached the goal
+            if (GoalsSatisfied(goalState, current.beliefs))
             {
-                Node goalNode = new Node(null, null, goal.EndState, 0);
-
-                //TODO:
-                //if(FindPath(goalNode, agent.actions))
-                //{
-                //    if (goalNode.IsLeafDead) continue;
-                //    Stack<Action> actionStack = new Stack<Action>();
-                //    while(goalNode.Leaves.Count > 0)
-                //    {
-                //        var cheapestLeaf = goalNode.Leaves.OrderBy(leaf => leaf.Cost).First();
-                //        goalNode = cheapestLeaf;
-                //        actionStack.Push(cheapestLeaf.Action);
-                //    }
-                //    return new ActionPlan(goal, actionStack, goalNode.Cost);
-                //}
+                // Return the sequence of actions from root to goal
+                return ReconstructPlan(current);
             }
-            Debug.LogWarning("No plan found");
-            return null;
-        }
-
-        bool FindPath(Node parent, HashSet<Action> actions)
-        {
-            return EasySearch(parent, actions);
-        }
-
-        bool EasySearch(Node parent, HashSet<Action> actions)
-        {
-            var orderedActions = actions.OrderBy(action => action.Cost);
-
-            foreach (var action in orderedActions)
+            
+            // Skip if we've visited this state
+            string stateKey = current.beliefs.ToString();
+            if (visitedStates.Contains(stateKey))
             {
-                var requiredEffects = parent.RequiredEffects;
-
-                requiredEffects.RemoveWhere(belief => belief.Evaluate());
-
-                if (requiredEffects.Count == 0)
+                continue;
+            }
+            
+            visitedStates.Add(stateKey);
+            
+            // Find applicable actions
+            foreach (Action action in actions)
+            {
+                if (ActionPrerequisitesSatisfied(action, current.beliefs))
                 {
-                    return true;
-                }
-
-                if (action.Effects.Any(requiredEffects.Contains))
-                {
-                    var newRequiredEffects = new HashSet<Belief>(requiredEffects);
-                    newRequiredEffects.Except(action.Effects);
-                    newRequiredEffects.UnionWith(action.Preconditions);
-
-                    var newAvailableActions = new HashSet<Action>(actions);
-                    newAvailableActions.Remove(action);
-
-                    var newNode = new Node(parent, action, newRequiredEffects, parent.Cost + action.Cost);
-
-                    if (FindPath(newNode, newAvailableActions))
+                    // Create a new node
+                    Node nextNode = new Node();
+                    nextNode.beliefs = new Beliefs(current.beliefs); // Clone beliefs
+                    
+                    // Apply action effects
+                    foreach (var effect in action.effects)
                     {
-                        parent.Leaves.Add(newNode);
-                        newRequiredEffects.ExceptWith(newNode.Action.Preconditions);
+                        nextNode.beliefs.SetBelief(effect.Key, effect.Value);
                     }
-
-                    if (newRequiredEffects.Count == 0) return true;
+                    
+                    // Set parent for backtracking
+                    nextNode.parent = current;
+                    
+                    // Add this action to the node
+                    nextNode.action = action;
+                    
+                    // Calculate cost
+                    nextNode.cost = current.cost + action.cost;
+                    
+                    // Add to frontier
+                    frontier.Add(nextNode);
                 }
             }
-            return parent.Leaves.Count > 0;
         }
+        
+        // No plan found
+        return null;
     }
-    public class Node
+    
+    // Helper method to reconstruct plan from goal node to root
+    private List<Action> ReconstructPlan(Node goalNode)
     {
-        public Node Parent { get; }
-        public Action Action { get; }
-        public HashSet<Belief> RequiredEffects { get; }
-        public List<Node> Leaves { get; }
-        public float Cost { get; }
-
-        public bool IsLeafDead => Leaves.Count == 0 && Action == default;
-        public Node(Node parent, Action action, HashSet<Belief> effects, float cost)
+        List<Action> plan = new List<Action>();
+        Node current = goalNode;
+        
+        // Traverse up the parent chain until we reach the root
+        while (current.parent != null)
         {
-            Parent = parent;
-            Action = action;
-            RequiredEffects = new(effects);
-            Leaves = new();
-            Cost = cost;
+            plan.Add(current.action);
+            current = current.parent;
         }
+        
+        // Reverse the plan to get the correct order (root to goal)
+        plan.Reverse();
+        return plan;
     }
-    public class  ActionPlan
-    {
-        public Goal Goal { get; }
-        public Stack<Action> Actions { get; }
-        public float TotalCost { get; set; }
 
-        public ActionPlan(Goal goal, Stack<Action> actions, float totalCost)
+    private List<Action> EasySearch(Beliefs worldState, Dictionary<string, bool> goal, List<Action> actions)
+    {
+        List<Action> results = new List<Action>();
+        
+        System.Type worldStateType = worldState.GetType();
+        Debug.Log(worldStateType.Name);
+        // While the goal isn't sastisfied
+        while (!GoalsSatisfied(goal, worldState))
         {
-            Goal = goal;
-            Actions = actions;
-            TotalCost = totalCost;
+            // Find all actions that could apply to the current world state
+            List<Action> applicableActions = new List<Action>();
+            
+            foreach (Action a in actions)
+            {
+                if (ActionPrerequisitesSatisfied(a, worldState))
+                {
+                    applicableActions.Add(a);
+                }
+            }
+            
+            if (applicableActions.Count == 0) return null; // No solution
+            
+            // Find the lowest cost action
+            applicableActions.Sort((x, y) => x.cost.CompareTo(y.cost));
+            
+            // Apply that action's effects to the world state
+            Action bestAction = applicableActions[0];
+            
+            // Apply effects
+            foreach (var effect in bestAction.effects)
+            {
+                worldState.SetBelief(effect.Key, effect.Value);
+            }
+            
+            // Add the action to our results
+            results.Add(bestAction);
+            
+            // Remove the best action from the list of available actions
+            // This is what's preventing cycles & infinite loops
+            actions = actions.Except(new List<Action>() { bestAction }).ToList();
         }
+        
+        return results;
+    }
+
+    // Helper method to check if the world state (aka a node's beliefs)
+    // satisfies all goal conditions
+    private bool GoalsSatisfied(Dictionary<string, bool> goal, Beliefs worldState)
+    {
+        foreach (var state in goal)
+        {
+            bool value;
+            if (!worldState.TryGetBelief(state.Key, out value) || value != state.Value)
+            {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    // Helper method to check if all the prerequisites for an action
+    // are present in the world state
+    private bool ActionPrerequisitesSatisfied(Action action, Beliefs worldState)
+    {
+        foreach (var prereq in action.preconditions)
+        {
+            bool value;
+            if (!worldState.TryGetBelief(prereq.Key, out value) || value != prereq.Value)
+            {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    private class Node
+    {
+        public Beliefs beliefs; // Current state
+        public float cost; // Cost to reach this node
+        public Node parent; // Parent node for backtracking
+        public Action action; // Action that led to this node
     }
 }

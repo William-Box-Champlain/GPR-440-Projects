@@ -1,0 +1,957 @@
+#pragma kernel Advection;
+#pragma kernel Diffusion;
+#pragma kernel ApplyForces;
+#pragma kernel Divergence;
+#pragma kernel PressureDelta;
+#pragma kernel PressureSolve;
+#pragma kernel Visualization;
+#pragma kernel PressureVisualization;
+#pragma kernel DensityAdvection;
+#pragma kernel InitializePressureField
+
+#pragma enable_d3d11_debug_symbols
+
+//==================================
+// BUFFER DECLARATIONS
+//==================================
+RWTexture2D<float4> VelocityTexture;
+RWTexture2D<float4> VelocityTexturePrev;
+RWTexture2D<float> PressureTexture;
+RWTexture2D<float> PressureTexturePrev;
+RWTexture2D<float> DivergenceTexture;
+RWTexture2D<float4> BoundaryTexture;
+RWTexture2D<float4> VisualizationTexture;
+RWTexture2D<float4> PressureVisualizationTexture;
+RWTexture2D<float> DensityTexture;
+RWTexture2D<float> DensityTexturePrev;
+
+//==================================
+// PARAMETERS
+//==================================
+float maxSinkSourceStrength;
+float deltaTime;
+float2 resolution;
+float4 bounds;
+float viscosityCoeff;
+float pressureCoeff;
+int iterationCount;
+float2 inverseResolution; //calculated as resolution / bounds.xy 
+float densityDissipation = 0.99;
+float densityToVelocity = 1.0;
+float baseDensity = 1.0;
+
+//==================================
+// CONSTANTS
+//==================================
+static float4 CELL = float4(0, 0, 0, 1);
+static float4 BOUNDARY = float4(0, 0, 1, 0);
+static float4 SOURCE = float4(0, 1, 0, 0);
+static float4 SINK = float4(1, 0, 0, 0);
+static float EPSILON = 0.01;
+static float OMEGA = 1.1;
+static float THRESHOLD = 0.001;
+static float DISSIPATION = 0.80;
+static float MAX_VELOCITY = 2.0;
+
+//==================================
+// STAGNATION HANDLING CONSTANTS
+//==================================
+static float STAGNATION_THRESHOLD = 0.2; // Velocity magnitude below this is considered stagnant
+static float STAGNATION_TRANSITION_RANGE = 0.5; // Controls smoothness of transition between stagnant and flowing
+static float ARTIFICIAL_VISCOSITY_AMOUNT = 0.1; // Additional viscosity for stagnant regions
+static float MAX_PERTURBATION_STRENGTH = 0.005; // Maximum random perturbation magnitude
+static float MIN_PERTURBATION_STRENGTH = 0.001; // Minimum random perturbation magnitude
+static float SEVERE_STAGNATION_THRESHOLD = 0.7; // Threshold for stronger perturbation
+static float STAGNANT_DIFFUSION_FACTOR = 0.03; // Strength of additional diffusion in stagnant areas
+static float NEIGHBOR_BLEND_FACTOR = 0.2; // Weight for neighboring velocities during diffusion
+
+//==================================
+// HELPER FUNCTIONS - MASKS & TYPES
+//==================================
+// Convert mask value to boolean (true when mask is approximately 1.0)
+bool MaskToBool(float mask)
+{
+    return mask > (1.0 - THRESHOLD);
+}
+
+// Basic position bounds checking
+bool WithinAbsoluteBounds(uint2 id)
+{
+    return (id.x <= (uint) resolution.x || id.y <= (uint) resolution.y);
+}
+
+// Cell mask (fluid cells have alpha > THRESHOLD)
+float GetCellMask(int2 cell)
+{
+    return step(THRESHOLD, BoundaryTexture[cell].a);
+}
+
+// Boundary mask (blue channel > THRESHOLD)
+float GetBoundaryMask(int2 cell)
+{
+    return step(THRESHOLD, BoundaryTexture[cell].b);
+}
+
+// Source mask (green channel > THRESHOLD)
+float GetSourceMask(int2 cell)
+{
+    return BoundaryTexture[cell].g;
+}
+
+// Sink mask (red channel > THRESHOLD)
+float GetSinkMask(int2 cell)
+{
+    return BoundaryTexture[cell].r;
+}
+
+//==================================
+// HELPER FUNCTIONS - SAMPLING
+//==================================
+
+float2 ClampVelocity(float2 velocity)
+{
+    float speed = length(velocity);
+    float scale = min(1.0, MAX_VELOCITY / max(speed, EPSILON));
+    return velocity * scale;
+}
+
+float GetCellPressure(int2 cell)
+{
+    return BoundaryTexture[cell].g * maxSinkSourceStrength - BoundaryTexture[cell].r * maxSinkSourceStrength;
+}
+
+float2 SampleVelocity(float2 pos, RWTexture2D<float4> velocityTex)
+{
+    // Get texture dimensions
+    float2 texSize;
+    velocityTex.GetDimensions(texSize.x, texSize.y);
+
+    // Ensure position is within bounds
+    pos = clamp(pos, float2(0, 0), texSize - float2(1, 1));
+
+    // Get integer position and fraction
+    float2 i = floor(pos);
+    float2 f = pos - i;
+    int2 i00 = int2(i);
+    int2 i10 = i00 + int2(1, 0);
+    int2 i01 = i00 + int2(0, 1);
+    int2 i11 = i00 + int2(1, 1);
+
+    // Boundary handling - we need to know which cells are boundaries
+    float i00Mask = GetBoundaryMask(i00);
+    float i10Mask = GetBoundaryMask(i10);
+    float i01Mask = GetBoundaryMask(i01);
+    float i11Mask = GetBoundaryMask(i11);
+
+    // Sample velocities with boundary conditions applied
+    float2 v00 = i00Mask * velocityTex[i00].xy;
+    float2 v10 = i10Mask * velocityTex[i10].xy;
+    float2 v01 = i01Mask * velocityTex[i01].xy;
+    float2 v11 = i11Mask * velocityTex[i11].xy;
+
+    // Bilinear interpolation
+    return lerp(lerp(v00, v10, f.x), lerp(v01, v11, f.x), f.y);
+}
+
+float SampleDensity(float2 pos, RWTexture2D<float> densityTex, float2 resolution)
+{
+    // Get texture dimensions
+    float2 texSize;
+    densityTex.GetDimensions(texSize.x, texSize.y);
+
+    // Ensure position is within bounds
+    pos = clamp(pos, float2(0, 0), texSize - float2(1, 1));
+
+    // Get integer position and fraction
+    float2 i = floor(pos);
+    float2 f = pos - i;
+    int2 i00 = int2(i);
+    int2 i10 = i00 + int2(1, 0);
+    int2 i01 = i00 + int2(0, 1);
+    int2 i11 = i00 + int2(1, 1);
+
+    // Boundary handling
+    float i00Mask = GetCellMask(i00);
+    float i10Mask = GetCellMask(i10);
+    float i01Mask = GetCellMask(i01);
+    float i11Mask = GetCellMask(i11);
+
+    // Sample densities with boundary conditions
+    float d00 = i00Mask * densityTex[i00];
+    float d10 = i10Mask * densityTex[i10];
+    float d01 = i01Mask * densityTex[i01];
+    float d11 = i11Mask * densityTex[i11];
+
+    // Bilinear interpolation
+    return lerp(lerp(d00, d10, f.x), lerp(d01, d11, f.x), f.y);
+}
+
+//==================================
+// HELPER FUNCTIONS - TEXTURE ITERATION
+//==================================
+void IterateTextures(int2 cell, RWTexture2D<float4> source, RWTexture2D<float4> destination, 
+                    int2 idxL, int2 idxR, int2 idxB, int2 idxT, 
+                    float bL, float bR, float bB, float bT,
+                    float alpha, float beta)
+{
+    // Sample velocities from neighbors
+    float2 vL = source[idxL].xy;
+    float2 vR = source[idxR].xy;
+    float2 vB = source[idxB].xy;
+    float2 vT = source[idxT].xy;
+    float2 vC = source[cell].xy;
+
+    // Apply boundary conditions - if neighbor is boundary, use zero velocity
+    vL = lerp(vL, float2(0, 0), bL);
+    vR = lerp(vR, float2(0, 0), bR);
+    vB = lerp(vB, float2(0, 0), bB);
+    vT = lerp(vT, float2(0, 0), bT);
+
+    // Update velocity according to the diffusion equation
+    float2 velocity = (vL + vR + vB + vT + vC * alpha) * beta;
+
+    // Write to destination
+    velocity = ClampVelocity(velocity);
+    destination[cell] = float4(velocity, 0, 0);
+}
+void DensityAdvectionFunc(uint3 id,
+    RWTexture2D<float> DensityTexture,
+    RWTexture2D<float> DensityTexturePrev,
+    RWTexture2D<float4> VelocityTexture,
+    RWTexture2D<float4> BoundaryTexture,
+    float deltaTime,
+    float2 inverseResolution,
+    float densityDissipation,
+    float maxSinkSourceStrength,
+    float2 resolution)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+    float2 position = float2(cell)+0.5; // Centers the position on cell
+
+    // Skip if not a cell
+    if (!MaskToBool(GetCellMask(cell)))
+    {
+        if (MaskToBool(GetBoundaryMask(cell)))
+        {
+            DensityTexturePrev[cell] = 0;
+        }
+        return;
+    }
+
+    float2 velocity = VelocityTexture[cell].xy;
+
+    // Back-trace position using velocity field
+    float2 backTracedPosition = position - velocity * deltaTime * inverseResolution;
+
+    // Sample previous density at back-traced position
+    float newDensity = SampleDensity(backTracedPosition, DensityTexture, resolution);
+
+    // Apply dissipation
+    newDensity *= densityDissipation;
+
+    // Apply source/sink contributions
+    float sourceMask = GetSourceMask(cell);
+    float sinkMask = GetSinkMask(cell);
+
+    // Sources add density, sinks remove it
+    newDensity += sourceMask * maxSinkSourceStrength * deltaTime;
+    newDensity = max(0.0, newDensity - sinkMask * maxSinkSourceStrength * deltaTime);
+
+    // Store new density
+    DensityTexturePrev[cell] = newDensity;
+}
+
+float CalculateDensityAwareDivergence(float standardDivergence,
+    int2 cell,
+    RWTexture2D<float> DensityTexture,
+    float maxSinkSourceStrength)
+{
+    // Calculate density rate of change (∂ρ/∂t)
+    float sourceMask = GetSourceMask(cell);
+    float sinkMask = GetSinkMask(cell);
+    float densityChange = sourceMask * maxSinkSourceStrength - sinkMask * maxSinkSourceStrength;
+
+    // Modify divergence to account for density changes (∇·u = (1/ρ)(∂ρ/∂t))
+    float density = max(DensityTexture[cell], 0.01); // Avoid division by zero
+    float modifiedDivergence = standardDivergence - (densityChange / density);
+
+    return modifiedDivergence;
+}
+
+float2 CalculateDensityGradientForce(int2 cell,
+    RWTexture2D<float> DensityTexture,
+    float densityToVelocity,
+    float2 resolution,
+    float deltaTime)
+{
+    // Get neighboring cells with clamping to ensure valid indices
+    int2 idxL = int2(max(0, cell.x - 1), cell.y);
+    int2 idxR = int2(min((int)resolution.x - 1, cell.x + 1), cell.y);
+    int2 idxB = int2(cell.x, max(0, cell.y - 1));
+    int2 idxT = int2(cell.x, min((int)resolution.y - 1, cell.y + 1));
+
+    // Sample density from neighbors
+    float dL = DensityTexture[idxL];
+    float dR = DensityTexture[idxR];
+    float dB = DensityTexture[idxB];
+    float dT = DensityTexture[idxT];
+
+    // Calculate density gradient
+    float2 densityGrad = float2(dR - dL, dT - dB) * 0.5 * densityToVelocity;
+
+    // Calculate force (negative gradient scaled by deltaTime)
+    // Fluids flow from high to low density
+    return -densityGrad * deltaTime;
+}
+
+//==================================
+// KERNELS - FLUID DYNAMICS
+//==================================
+[numthreads(8, 8, 1)]
+void Advection(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+    float2 position = float2(cell)+0.5; //centers the position on cell
+
+    //skip if not a cell
+    if (!MaskToBool(GetCellMask(cell)))
+    {
+        VelocityTexturePrev[cell] = VelocityTexturePrev[cell] * (1.0 - GetBoundaryMask(cell));
+        return;
+    }
+
+    float2 velocity = VelocityTexture[cell].xy;
+
+    float2 backTracedPosition = position - velocity * deltaTime * inverseResolution;
+
+    float2 newVelocity = SampleVelocity(backTracedPosition, VelocityTexture);
+
+    newVelocity *= DISSIPATION;
+    newVelocity = ClampVelocity(newVelocity);
+    VelocityTexture[cell] = float4(newVelocity, 0, 0);
+}
+
+[numthreads(8, 8, 1)]
+void DensityAdvection(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+    
+    // Skip if not a cell
+    if (!MaskToBool(GetCellMask(cell)))
+    {
+        if (MaskToBool(GetBoundaryMask(cell)))
+        {
+            DensityTexturePrev[cell] = 0;
+        }
+        return;
+    }
+
+    // Run advection once per timestep
+    DensityAdvectionFunc(id,
+        DensityTexture,
+        DensityTexturePrev,
+        VelocityTexture,
+        BoundaryTexture,
+        deltaTime,
+        inverseResolution,
+        densityDissipation,
+        maxSinkSourceStrength,
+        resolution);
+}
+
+[numthreads(8, 8, 1)]
+void Diffusion(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+
+    if (!MaskToBool(GetCellMask(cell)))
+    {
+        VelocityTexture[cell] = VelocityTexturePrev[cell];
+        return;
+    }
+
+    float alpha = viscosityCoeff * deltaTime;
+    float beta = 1.0 / (4.0 * alpha);
+
+    // Get neighboring cells with clamping to ensure valid indices
+    int2 idxL = int2(max(0, cell.x - 1), cell.y);
+    int2 idxR = int2(min((int)resolution.x - 1, cell.x + 1), cell.y);
+    int2 idxB = int2(cell.x, max(0, cell.y - 1));
+    int2 idxT = int2(cell.x, min((int)resolution.y - 1, cell.y + 1));
+
+    // Get boundary states for neighbors
+    float bL = GetBoundaryMask(idxL);
+    float bR = GetBoundaryMask(idxR);
+    float bB = GetBoundaryMask(idxB);
+    float bT = GetBoundaryMask(idxT);
+
+    // Perform Gauss-Seidel iterations with buffer ping-ponging
+    for (uint i = 0; i < (uint)iterationCount; i++)
+    {
+        uint mod = i % (uint) 2;
+        if (mod == 0)
+        {
+            IterateTextures(cell, VelocityTexturePrev, VelocityTexture, 
+                           idxL, idxR, idxB, idxT, 
+                           bL, bR, bB, bT, 
+                           alpha, beta);
+        }
+        else
+        {
+            IterateTextures(cell, VelocityTexture, VelocityTexturePrev, 
+                           idxL, idxR, idxB, idxT, 
+                           bL, bR, bB, bT, 
+                           alpha, beta);
+        }
+    }
+
+    // Ensure the final result is in VelocityTexture (the "current" buffer)
+    if (iterationCount % (uint) 2 == 0)
+    {
+        // If iterationCount is even, the last write was to VelocityTexturePrev
+        VelocityTexture[cell] = VelocityTexturePrev[cell];
+    }
+}
+
+float2 Stagnation(int2 cell, float2 velocity, float viscosityCoeff, float deltaTime)
+{
+    float speed = length(velocity);
+        
+    //smooth out the transition from fully stagnant to flowing
+    float lowerBound = STAGNATION_THRESHOLD * (1.0 - STAGNATION_TRANSITION_RANGE);
+    float upperBound = STAGNATION_THRESHOLD * (1.0 + STAGNATION_TRANSITION_RANGE);
+    float stagnationScalar = 1.0 - smoothstep(lowerBound, upperBound, speed);
+    
+    float artificialViscosity = lerp(viscosityCoeff, ARTIFICIAL_VISCOSITY_AMOUNT + viscosityCoeff, stagnationScalar);
+    
+    //Create some noise to break up symmetry in stagnant regions
+    float2 perturbation = float2(0, 0);
+    
+    float randX = frac(sin(dot(float2(cell) + float2(cell.x * 0.017, cell.y * 0.031), float2(12.9898, 78.233))) * 43758.5453);
+    float randY = frac(sin(dot(float2(cell) + float2(cell.x * 0.019, cell.y * 0.029), float2(39.346, 11.135))) * 53758.5453);
+    
+    float perturbationStrength = lerp(MIN_PERTURBATION_STRENGTH, MAX_PERTURBATION_STRENGTH, step(SEVERE_STAGNATION_THRESHOLD, stagnationScalar));
+    perturbation = (float2(randX, randY) * 2.0 - 1.0) * perturbationStrength * stagnationScalar * deltaTime;
+    
+    velocity += perturbation;
+    
+    // Apply extra diffusion to stagnant regions (helps pressure propagate)
+    // Get neighboring cells with clamping to ensure valid indices
+    int2 idxL = int2(max(0, cell.x - 1), cell.y);
+    int2 idxR = int2(min((int) resolution.x - 1, cell.x + 1), cell.y);
+    int2 idxB = int2(cell.x, max(0, cell.y - 1));
+    int2 idxT = int2(cell.x, min((int) resolution.y - 1, cell.y + 1));
+    
+    // Sample velocities from neighbors
+    float2 vL = VelocityTexture[idxL].xy;
+    float2 vR = VelocityTexture[idxR].xy;
+    float2 vB = VelocityTexture[idxB].xy;
+    float2 vT = VelocityTexture[idxT].xy;
+    
+    // Apply artificial diffusion in stagnant regions
+    float stagnantDiffusion = STAGNANT_DIFFUSION_FACTOR * stagnationScalar;
+    velocity = lerp(velocity, (velocity + vL + vR + vB + vT) * 0.2, stagnantDiffusion);
+    
+    return velocity;
+}
+
+[numthreads(8, 8, 1)]
+void ApplyForces(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+
+    if (!MaskToBool(GetCellMask(cell)))
+        return;
+
+    // Get current velocity
+    float2 velocity = VelocityTexture[cell].xy;
+
+    // Check if cell is source or sink
+    float sourceMask = GetSourceMask(cell);
+    float sinkMask = -1 * GetSinkMask(cell);
+
+    float2 cellCenter = float2(cell)+0.5;
+
+    float2 posDelta = float2(cell)-cellCenter; // Vector from cell corner to center
+    float radius = max(length(posDelta), 0.01); // Avoid division by zero
+    float2 direction = posDelta / radius; // Normalize
+
+    velocity += direction * (sourceMask + sinkMask) * maxSinkSourceStrength * deltaTime;
+
+    // Add density gradient forces
+    velocity += CalculateDensityGradientForce(cell, DensityTexture, densityToVelocity, resolution, deltaTime);
+
+    velocity = Stagnation(cell, velocity, viscosityCoeff, deltaTime);
+    
+    // Update velocity field
+    velocity = ClampVelocity(velocity);
+    VelocityTexture[cell] = float4(velocity, 0, 0);
+}
+
+//==================================
+// KERNELS - PRESSURE PROJECTION
+//==================================
+[numthreads(8, 8, 1)]
+void Divergence(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+
+    if (MaskToBool(GetBoundaryMask(cell)))
+    {
+        DivergenceTexture[cell] = 0;
+        return;
+    }
+
+    // Get center velocity
+    float2 vCenter = VelocityTexture[cell].xy;
+
+    // Get neighboring cells with clamping to ensure valid indices
+    int2 idxL = int2(max(0, cell.x - 1), cell.y);
+    int2 idxR = int2(min((int)resolution.x - 1, cell.x + 1), cell.y);
+    int2 idxB = int2(cell.x, max(0, cell.y - 1));
+    int2 idxT = int2(cell.x, min((int)resolution.y - 1, cell.y + 1));
+
+    // Get boundary states for neighbors
+    float bL = GetBoundaryMask(idxL);
+    float bR = GetBoundaryMask(idxR);
+    float bB = GetBoundaryMask(idxB);
+    float bT = GetBoundaryMask(idxT);
+
+    // Sample velocities from neighbors
+    float2 vL = VelocityTexture[idxL].xy;
+    float2 vR = VelocityTexture[idxR].xy;
+    float2 vB = VelocityTexture[idxB].xy;
+    float2 vT = VelocityTexture[idxT].xy;
+
+    // Apply boundary conditions using masking
+    vL.x = lerp(vL.x, -vCenter.x, bL);
+    vR.x = lerp(vR.x, -vCenter.x, bR);
+    vB.y = lerp(vB.y, -vCenter.y, bB);
+    vT.y = lerp(vT.y, -vCenter.y, bT);
+
+    // Calculate divergence using central differences with grid scale factors
+    float divergence = (0.5 * inverseResolution.x * (vR.x - vL.x)) + (0.5 * inverseResolution.y * (vT.y - vB.y));
+
+    // Apply density-aware modification to divergence
+    divergence = CalculateDensityAwareDivergence(divergence, cell, DensityTexture, maxSinkSourceStrength);
+
+    // Store the result
+    DivergenceTexture[cell] = divergence;
+}
+
+[numthreads(8, 8, 1)]
+void PressureDelta(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+
+    if (!MaskToBool(GetCellMask(cell)))
+        return;
+
+    float boundaryMask = GetBoundaryMask(cell);
+    float sourceMask = GetSourceMask(cell);
+    float sinkMask = GetSinkMask(cell);
+
+    float2 velocity = VelocityTexture[cell].xy;
+    float centerPressure = PressureTexture[cell];
+
+    // Get neighboring cells with clamping to ensure valid indices
+    int2 idxL = int2(max(0, cell.x - 1), cell.y);
+    int2 idxR = int2(min((int)resolution.x - 1, cell.x + 1), cell.y);
+    int2 idxB = int2(cell.x, max(0, cell.y - 1));
+    int2 idxT = int2(cell.x, min((int)resolution.y - 1, cell.y + 1));
+
+    // Create edge masks (1.0 if at edge, 0.0 otherwise)
+    float leftEdgeMask = step(cell.x, 0);
+    float rightEdgeMask = step((int)resolution.x - 1, cell.x);
+    float bottomEdgeMask = step(cell.y, 0);
+    float topEdgeMask = step((int)resolution.y - 1, cell.y);
+
+    // Get boundary masks for neighbors
+    float leftBoundaryMask = GetBoundaryMask(idxL) * (1.0 - leftEdgeMask);
+    float rightBoundaryMask = GetBoundaryMask(idxR) * (1.0 - rightEdgeMask);
+    float bottomBoundaryMask = GetBoundaryMask(idxB) * (1.0 - bottomEdgeMask);
+    float topBoundaryMask = GetBoundaryMask(idxT) * (1.0 - topEdgeMask);
+
+    // Get neighbor pressures
+    float pL = PressureTexture[idxL];
+    float pR = PressureTexture[idxR];
+    float pB = PressureTexture[idxB];
+    float pT = PressureTexture[idxT];
+
+    // Use center pressure for boundary neighbors using masking
+    pL = lerp(pL, centerPressure, leftBoundaryMask + leftEdgeMask);
+    pR = lerp(pR, centerPressure, rightBoundaryMask + rightEdgeMask);
+    pB = lerp(pB, centerPressure, bottomBoundaryMask + bottomEdgeMask);
+    pT = lerp(pT, centerPressure, topBoundaryMask + topEdgeMask);
+
+    // Calculate pressure gradient
+    float2 pressureGrad = float2(pR - pL, pT - pB) * -0.5;
+
+    // Subtract gradient to make velocity divergence-free
+    velocity -= pressureGrad;
+
+    // Store the result
+    velocity = ClampVelocity(velocity);
+    VelocityTexture[cell] = float4(velocity, 0, 0);
+}
+
+[numthreads(8, 8, 1)]
+void PressureSolve(uint3 id : SV_DispatchThreadID)
+{
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+
+    if (!MaskToBool(GetCellMask(cell)))
+        return;
+
+    float boundaryMask = GetBoundaryMask(cell);
+    float sourceMask = GetSourceMask(cell);
+    float sinkMask = GetSinkMask(cell);
+    float cellPressure = GetCellPressure(cell);
+
+    float pressure = (1.0 - boundaryMask) * cellPressure * pressureCoeff;
+
+    float anyEdgeMask = max(max(step(cell.x, 0), step((int) resolution.x - 1, cell.x)),
+                             max(step(cell.y, 0), step((int) resolution.y - 1, cell.y)));
+    
+    PressureTexture[cell] = pressure;
+    PressureTexturePrev[cell] = pressure;
+
+    // Gauss-Seidel relaxation loop for normal fluid cells
+    for (int i = 0; i < iterationCount; i++)
+    {
+        // Get neighboring cells with edge checks
+        int2 idxL = int2(max(0, cell.x - 1), cell.y);
+        int2 idxR = int2(min((int)resolution.x - 1, cell.x + 1), cell.y);
+        int2 idxB = int2(cell.x, max(0, cell.y - 1));
+        int2 idxT = int2(cell.x, min((int)resolution.y - 1, cell.y + 1));
+
+        // Create edge masks (1.0 if at edge, 0.0 otherwise)
+        float leftEdgeMask = step(cell.x, 0);
+        float rightEdgeMask = step((int)resolution.x - 1, cell.x);
+        float bottomEdgeMask = step(cell.y, 0);
+        float topEdgeMask = step((int)resolution.y - 1, cell.y);
+
+        // Get boundary masks for neighbors
+        float leftBoundaryMask = GetBoundaryMask(idxL) * (1.0 - leftEdgeMask);
+        float rightBoundaryMask = GetBoundaryMask(idxR) * (1.0 - rightEdgeMask);
+        float bottomBoundaryMask = GetBoundaryMask(idxB) * (1.0 - bottomEdgeMask);
+        float topBoundaryMask = GetBoundaryMask(idxT) * (1.0 - topEdgeMask);
+
+        // Get neighboring pressures
+        float pL = PressureTexturePrev[idxL];
+        float pR = PressureTexturePrev[idxR];
+        float pB = PressureTexturePrev[idxB];
+        float pT = PressureTexturePrev[idxT];
+
+        // Apply boundary conditions using masks
+        pL = lerp(pL, pressure, leftBoundaryMask + leftEdgeMask);
+        pR = lerp(pR, pressure, rightBoundaryMask + rightEdgeMask);
+        pB = lerp(pB, pressure, bottomBoundaryMask + bottomEdgeMask);
+        pT = lerp(pT, pressure, topBoundaryMask + topEdgeMask);
+
+        // Get divergence at this cell
+        float div = DivergenceTexture[cell];
+
+        // Pressure update equation
+        pressure = (1.0 - OMEGA) * pressure + OMEGA * ((pL + pR + pB + pT + div) * 0.25);
+        
+        pressure = lerp(pressure, pressure * DISSIPATION, anyEdgeMask);
+
+        // Update the pressure value for the next iteration
+        PressureTexturePrev[cell] = pressure;
+    }
+    PressureTexture[cell] = pressure;
+}
+
+//==================================
+// KERNEL - VISUALIZATION
+//==================================
+[numthreads(8, 8, 1)]
+void Visualization(uint3 id : SV_DispatchThreadID)
+{
+    // Check if within grid bounds
+    if (id.x >= (uint) resolution.x || id.y >= (uint) resolution.y)
+        return;
+
+    int2 cell = int2(id.xy);
+
+    // Get cell type masks
+    float boundaryMask = GetBoundaryMask(cell);
+    float sourceMask = GetSourceMask(cell);
+    float sinkMask = GetSinkMask(cell);
+
+    // Get velocity for fluid cell visualization
+    float2 vel = VelocityTexture[cell].xy;
+
+    // Set base colors for each cell type
+    float4 boundaryColor = BOUNDARY;
+    float4 sourceColor = SOURCE;
+    float4 sinkColor = SINK;
+
+    // Calculate velocity-based color for fluid cells
+    float angle = atan2(vel.y, vel.x) / (3.14159 * 2) + 0.5;
+    float magnitude = length(vel);
+    float saturation = clamp(magnitude * 3.0, 0.0, 1.0);
+    float value = clamp(0.5 + magnitude * 2.0, 0.0, 1.0);
+
+    // Convert HSV to RGB for fluid color
+    float h = angle * 6.0;
+    float c = saturation * value;
+    float x = c * (1.0 - abs(fmod(h, 2.0) - 1.0));
+    float m = value - c;
+
+    float3 rgb;
+    if (h < 1.0)
+        rgb = float3(c, x, 0.0);
+    else if (h < 2.0)
+        rgb = float3(x, c, 0.0);
+    else if (h < 3.0)
+        rgb = float3(0.0, c, x);
+    else if (h < 4.0)
+        rgb = float3(0.0, x, c);
+    else if (h < 5.0)
+        rgb = float3(x, 0.0, c);
+    else
+        rgb = float3(c, 0.0, x);
+
+    float4 fluidColor = float4(rgb + m, 1.0);
+
+    // Blend colors based on cell type masks
+    float4 color = fluidColor;
+    color = lerp(color, boundaryColor, boundaryMask);
+    color = lerp(color, sourceColor, sourceMask);
+    color = lerp(color, sinkColor, sinkMask);
+
+    // Store the visualization color
+    VisualizationTexture[cell] = color;
+}
+
+//==================================
+// KERNEL - PRESSURE VISUALIZATION
+//==================================
+
+// Required textures (these should already be declared in your main shader)
+// RWTexture2D<float> PressureTexture;
+// RWTexture2D<float4> BoundaryTexture;
+// RWTexture2D<float4> PressureVisualizationTexture; // New texture to write visualization to
+
+// These parameters should already be in your main shader
+// float2 resolution;
+// float maxSinkSourceStrength; // For normalizing pressure values
+
+// Optional parameters for pressure visualization
+float pressureScale = 1.0; // Adjusts overall intensity of pressure visualization
+float positivePressureMax = 5.0; // Maximum positive pressure for color scaling
+float negativePressureMax = 5.0; // Maximum negative pressure for color scaling
+
+[numthreads(8, 8, 1)]
+void PressureVisualization(uint3 id : SV_DispatchThreadID)
+{
+    // Check if within grid bounds
+    if (id.x >= (uint) resolution.x || id.y >= (uint) resolution.y)
+        return;
+
+    int2 cell = int2(id.xy);
+
+    // Get cell type masks
+    float boundaryMask = GetBoundaryMask(cell);
+    float sourceMask = GetSourceMask(cell);
+    float sinkMask = GetSinkMask(cell);
+
+    // Get pressure value
+    float pressure = PressureTexture[cell];
+
+    // Create colors for different cell types
+    float4 boundaryColor = float4(0.2, 0.2, 0.2, 1.0); // Dark gray
+    float4 sourceColor = float4(0.0, 0.8, 0.0, 1.0); // Green
+    float4 sinkColor = float4(0.8, 0.0, 0.0, 1.0); // Red
+    
+    // Normalize and scale pressure for visualization
+    float normalizedPressure = pressure * pressureScale;
+    
+    // Create pressure color gradient:
+    // - Positive pressure: Red to Yellow
+    // - Negative pressure: Blue to Cyan
+    // - Near-zero pressure: White
+    float4 pressureColor;
+    
+    if (abs(normalizedPressure) < 0.01)
+    {
+        // Near-zero pressure is white
+        pressureColor = float4(1.0, 1.0, 1.0, 1.0);
+    }
+    else if (normalizedPressure > 0)
+    {
+        // Positive pressure: Red to Yellow gradient
+        float t = min(normalizedPressure / positivePressureMax, 1.0);
+        pressureColor = float4(1.0, t, 0.0, 1.0);
+    }
+    else
+    {
+        // Negative pressure: Blue to Cyan gradient
+        float t = min(abs(normalizedPressure) / negativePressureMax, 1.0);
+        pressureColor = float4(0.0, t, 1.0, 1.0);
+    }
+    
+    // Blend cell type with pressure color
+    float4 finalColor = pressureColor;
+    
+    // Override with boundary, source, and sink colors based on masks
+    finalColor = lerp(finalColor, boundaryColor, boundaryMask);
+    finalColor = lerp(finalColor, sourceColor, sourceMask);
+    finalColor = lerp(finalColor, sinkColor, sinkMask);
+    
+    // Write the final color to the visualization texture
+    PressureVisualizationTexture[cell] = finalColor;
+}
+
+
+//==================================
+// PRESSURE INITIALIZATION KERNEL
+//==================================
+
+[numthreads(8, 8, 1)]
+void InitializePressureField(uint3 id : SV_DispatchThreadID)
+{
+    // Early exit if outside grid bounds
+    if (!WithinAbsoluteBounds(id.xy))
+        return;
+
+    int2 cell = int2(id.xy);
+    
+    // Skip boundary cells - set their pressure to zero
+    if (MaskToBool(GetBoundaryMask(cell)))
+    {
+        PressureTexture[cell] = 0;
+        PressureTexturePrev[cell] = 0;
+        return;
+    }
+    
+    // Get current cell type information
+    float sourceMask = GetSourceMask(cell);
+    float sinkMask = GetSinkMask(cell);
+    
+    // Direct source/sink cells get immediate pressure values
+    if (sourceMask > 0.5)
+    {
+        // Sources generate positive pressure
+        PressureTexture[cell] = maxSinkSourceStrength * pressureCoeff;
+        PressureTexturePrev[cell] = maxSinkSourceStrength * pressureCoeff;
+        return;
+    }
+    else if (sinkMask > 0.5)
+    {
+        // Sinks generate negative pressure
+        PressureTexture[cell] = -maxSinkSourceStrength * pressureCoeff;
+        PressureTexturePrev[cell] = -maxSinkSourceStrength * pressureCoeff;
+        return;
+    }
+    
+    // For other fluid cells, compute distance-based pressure estimate
+    
+    // Constants for pressure field initialization
+    float falloffRate = 0.75; // Controls how quickly pressure diminishes with distance
+    float sourceInfluence = 1.0; // Relative importance of sources vs sinks
+    float sinkInfluence = 1.2; // Make sinks slightly more influential for better flow
+    float maxInfluenceRadius = 40.0; // Maximum distance to consider (in grid cells)
+    float pressureFactor = 0.8; // Overall pressure magnitude scaling
+    
+    // Accumulators for pressure influence
+    float totalSourceInfluence = 0.0;
+    float totalSinkInfluence = 0.0;
+    float totalSourceWeight = 0.0;
+    float totalSinkWeight = 0.0;
+    
+    // Scan grid to find sources and sinks
+    for (int y = 0; y < resolution.y; y++)
+    {
+        for (int x = 0; x < resolution.x; x++)
+        {
+            int2 sampleCell = int2(x, y);
+            
+            // Check for sources
+            if (GetSourceMask(sampleCell) > 0.5)
+            {
+                float2 offset = float2(cell - sampleCell);
+                float distance = length(offset);
+                
+                // Skip if beyond influence radius
+                if (distance > maxInfluenceRadius)
+                    continue;
+                    
+                // Calculate weight based on distance
+                float weight = exp(-distance * falloffRate);
+                
+                // Add weighted influence
+                totalSourceInfluence += weight * sourceInfluence;
+                totalSourceWeight += weight;
+            }
+            
+            // Check for sinks
+            if (GetSinkMask(sampleCell) > 0.5)
+            {
+                float2 offset = float2(cell - sampleCell);
+                float distance = length(offset);
+                
+                // Skip if beyond influence radius
+                if (distance > maxInfluenceRadius)
+                    continue;
+                    
+                // Calculate weight based on distance
+                float weight = exp(-distance * falloffRate);
+                
+                // Add weighted influence
+                totalSinkInfluence += weight * sinkInfluence;
+                totalSinkWeight += weight;
+            }
+        }
+    }
+    
+    // Calculate net pressure from source and sink influences
+    float sourcePressure = (totalSourceWeight > 0.0) ?
+                           (totalSourceInfluence / totalSourceWeight) : 0.0;
+    float sinkPressure = (totalSinkWeight > 0.0) ?
+                         (totalSinkInfluence / totalSinkWeight) : 0.0;
+    
+    // Net pressure is positive influence minus negative influence
+    float netPressure = (sourcePressure - sinkPressure) * pressureFactor * maxSinkSourceStrength;
+    
+    // Scale by pressure coefficient
+    netPressure *= pressureCoeff;
+    
+    // Apply density-aware adjustments if needed
+    float cellDensity = DensityTexture[cell];
+    if (cellDensity > 0.0)
+    {
+        // Higher density regions get slightly higher pressure
+        netPressure *= (1.0 + 0.1 * min(1.0, cellDensity / baseDensity));
+    }
+    
+    // Store the calculated pressure
+    PressureTexture[cell] = netPressure;
+    PressureTexturePrev[cell] = netPressure;
+}

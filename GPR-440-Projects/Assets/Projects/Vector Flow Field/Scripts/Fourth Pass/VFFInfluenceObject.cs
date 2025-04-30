@@ -7,7 +7,7 @@ namespace fourth
 public class VFFInfluenceObject : MonoBehaviour
 {
     [SerializeField] bool IsActive;
-    [SerializeField] float Strength;
+    [SerializeField,Range(0.0f,1.0f)] float Strength;
     [SerializeField] eInfluenceType Type;
 
     private FlowFieldInfluence me;

@@ -22,6 +22,7 @@ namespace fourth
     {
         private string[] kernelStrings =
             {
+            "InitializePressureField",
             "Advection",
             "Diffusion",
             "ApplyForces",
@@ -30,6 +31,7 @@ namespace fourth
             "PressureDelta",
             "Visualization",
             "DensityAdvection", // NEW: Kernel for density advection
+            "PressureVisualization"
         };
         public string[] renderNames =
             {
@@ -42,7 +44,8 @@ namespace fourth
             "VisualizationTexture",
             "BoundaryAndInfluenceTexture",
             "DensityTexture",       // NEW: Texture for fluid density
-            "DensityTexturePrev"    // NEW: Texture for previous density state
+            "DensityTexturePrev",    // NEW: Texture for previous density state
+            "PressureVisualizationTexture"
         };
         private string[] simulationParameters =
         {
@@ -66,6 +69,8 @@ namespace fourth
         private List<FlowFieldInfluence> activeInfluences;
         private VFFParameters parameters;
         private Vector2 cachedResolution;
+        private float MAX_VELOCITY = 10.0f;
+        private float SAFETY_FACTOR = 0.9f;
 
         public VFFInterface(ComputeShader compute, VFFParameters parameters, List<FlowFieldInfluence> influences)
         {
@@ -93,7 +98,17 @@ namespace fourth
             this.activeInfluences = new List<FlowFieldInfluence>();
         }
 
-        public void Update(float deltaTime)
+        private float GetSafeTimestep(float deltaTime)
+        {
+            float cellSizeX = parameters.bounds.size.x / parameters.resolution.x;
+            float cellSizeY = parameters.bounds.size.z / parameters.resolution.y;
+            float minCellSize = Mathf.Min(cellSizeX, cellSizeY);
+            float maxDeltaTime = SAFETY_FACTOR * minCellSize / MAX_VELOCITY;
+            float safeTimeStep = Mathf.Min(deltaTime, maxDeltaTime);
+            return safeTimeStep;
+        }
+
+        public void Update(float deltaTime,VFFParameters parameters)
         {
             if (VFFCalculator == null)
             {
@@ -103,7 +118,14 @@ namespace fourth
 
             try
             {
-                VFFCalculator.SetFloat("deltaTime", deltaTime);
+                this.parameters = parameters;
+                SetParameters();
+                //CFL condition
+                float time = deltaTime;
+                time = GetSafeTimestep(time);
+                time *= .25f;
+                //Debug.Log(time);
+                VFFCalculator.SetFloat("deltaTime", time);
                 ApplyInfluences();
                 DispatchAllKernels();
             }
@@ -375,7 +397,7 @@ namespace fourth
         {
             Color output = new();
 
-            float normalizedStrength = Mathf.InverseLerp(0, parameters.maxSinkSourceStrength, influence.strength);
+            float normalizedStrength = influence.strength;
 
             switch (influence.type)
             {
@@ -425,7 +447,7 @@ namespace fourth
         {
             foreach(var kernel in kernels)
             {
-                if (VFFCalculator.HasKernel(kernel.Key)) Debug.Log($"Dispatching kernel {kernel.Key}");
+                //if (VFFCalculator.HasKernel(kernel.Key)) Debug.Log($"Dispatching kernel {kernel.Key}");
                 EasyDispatch(kernel.Value);
             }
         }
@@ -594,6 +616,8 @@ namespace fourth
             VFFCalculator.SetFloat("pressureCoeff", parameters.pressureCoeff);
             VFFCalculator.SetInt("iterationCount", parameters.iterationCount);
 
+            Debug.Log($"Sink/Source Strength {parameters.maxSinkSourceStrength}");
+
             // NEW: Set density-related parameters (using default values if not specified)
             VFFCalculator.SetFloat("densityDissipation", 0.99f);
             VFFCalculator.SetFloat("densityToVelocity", 1.0f);
@@ -674,6 +698,52 @@ namespace fourth
         {
             // Get the visualization render texture
             RenderTexture visualizationTexture = renderTextures["VisualizationTexture"];
+
+            // Create a temporary render texture to work with
+            RenderTexture tempTexture = RenderTexture.GetTemporary(
+                visualizationTexture.width,
+                visualizationTexture.height,
+                0,
+                RenderTextureFormat.ARGB32
+            );
+
+            // Copy visualization texture to our temp texture
+            Graphics.Blit(visualizationTexture, tempTexture);
+
+            // Set the active render texture so we can read pixels from it
+            RenderTexture.active = tempTexture;
+
+            // Create a new Texture2D to hold the data
+            Texture2D outputTexture = new Texture2D(
+                tempTexture.width,
+                tempTexture.height,
+                TextureFormat.RGBA32,
+                false
+            );
+
+            // Read the pixels from the active render texture into our Texture2D
+            outputTexture.ReadPixels(
+                new Rect(0, 0, tempTexture.width, tempTexture.height),
+                0,
+                0
+            );
+
+            // Apply the changes to make sure the texture data is updated
+            outputTexture.Apply();
+
+            // Clear the active render texture
+            RenderTexture.active = null;
+
+            // Release the temporary texture
+            RenderTexture.ReleaseTemporary(tempTexture);
+
+            return outputTexture;
+        }
+
+        public Texture2D GetPressureVisualization()
+        {
+            // Get the visualization render texture
+            RenderTexture visualizationTexture = renderTextures["PressureVisualizationTexture"];
 
             // Create a temporary render texture to work with
             RenderTexture tempTexture = RenderTexture.GetTemporary(

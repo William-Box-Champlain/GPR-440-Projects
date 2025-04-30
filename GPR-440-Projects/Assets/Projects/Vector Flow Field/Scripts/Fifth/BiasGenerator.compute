@@ -1,0 +1,95 @@
+// BiasGenerator.compute - Generates the resolution bias texture
+
+#pragma kernel GenerateBias
+
+// Input data
+StructuredBuffer<float2> Junctions;
+StructuredBuffer<float> JunctionImportance;
+StructuredBuffer<float4> Targets; // xyz = position, w = importance
+
+// Parameters
+int JunctionCount;
+int TargetCount;
+float BiasRadius;
+float MaxBiasStrength;
+float2 BoundsMin;
+float2 BoundsMax;
+int TextureWidth;
+int TextureHeight;
+
+// Output
+RWTexture2D<float> BiasOutput;
+
+// Falloff curve texture
+Texture2D<float> FalloffCurve;
+SamplerState sampler_FalloffCurve;
+
+// Convert texture coordinates to world position
+float2 TextureToWorld(uint2 id)
+{
+    float2 uv = float2(id.x / (float)(TextureWidth - 1), id.y / (float)(TextureHeight - 1));
+    return float2(
+        lerp(BoundsMin.x, BoundsMax.x, uv.x),
+        lerp(BoundsMin.y, BoundsMax.y, uv.y)
+    );
+}
+
+// Sample falloff curve
+float SampleFalloff(float distance)
+{
+    // Normalize distance to 0-1 range for curve sampling
+    float normalizedDist = saturate(distance / BiasRadius);
+    return FalloffCurve.SampleLevel(sampler_FalloffCurve, float2(normalizedDist, 0), 0).r;
+}
+
+[numthreads(8, 8, 1)]
+void GenerateBias(uint3 id : SV_DispatchThreadID)
+{
+    // Check if this thread is within bounds
+    if (id.x >= (uint)TextureWidth || id.y >= (uint)TextureHeight)
+        return;
+    
+    // Convert texture coordinates to world position
+    float2 worldPos = TextureToWorld(id.xy);
+    
+    // Start with zero bias
+    float bias = 0.0;
+    
+    // Add bias from junctions
+    for (int i = 0; i < JunctionCount; i++)
+    {
+        float2 junctionPos = Junctions[i];
+        float importance = JunctionImportance[i];
+        
+        // Calculate distance to junction
+        float distance = length(worldPos - junctionPos);
+        
+        // Apply bias based on distance and importance
+        if (distance < BiasRadius)
+        {
+            float falloff = SampleFalloff(distance);
+            bias = max(bias, falloff * importance);
+        }
+    }
+    
+    // Add bias from active targets
+    for (int i = 0; i < TargetCount; i++)
+    {
+        float4 target = Targets[i];
+        float2 targetPos = target.xy;
+        float targetImportance = target.z;
+        
+        // Calculate distance to target
+        float distance = length(worldPos - targetPos);
+        
+        // Apply bias based on distance and importance
+        if (distance < BiasRadius)
+        {
+            float falloff = SampleFalloff(distance);
+            bias = max(bias, falloff * targetImportance);
+        }
+    }
+    
+    // Store the bias value
+    BiasOutput[id.xy] = bias;
+}

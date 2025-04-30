@@ -1,5 +1,0 @@
-sceneSetups:
-- path: Assets/Projects/Vector Flow Field/Second_Pass_Scene.unity
-  isLoaded: 1
-  isActive: 1
-  isSubScene: 0

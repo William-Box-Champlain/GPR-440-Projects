@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.44657826, g: 0.49641263, b: 0.57481676, a: 1}
+  m_IndirectSpecularColor: {r: 0.44657898, g: 0.4964133, b: 0.5748178, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -135,7 +135,7 @@ GameObject:
   - component: {fileID: 308442105}
   - component: {fileID: 308442104}
   - component: {fileID: 308442103}
-  - component: {fileID: 308442102}
+  - component: {fileID: 308442107}
   m_Layer: 0
   m_Name: SimpleAgent (2)
   m_TagString: Untagged
@@ -143,23 +143,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &308442102
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 308442101}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2a7f62e8937917b4396546f2461ef90b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  moveSpeed: 3
-  rotationSpeed: 5
-  fieldInfluence: 1
-  randomVariance: 0.2
-  debugScalar: 30
 --- !u!135 &308442103
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -246,6 +229,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &308442107
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 308442101}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1e507f1c6cacdf54084ff30cf35dbb11, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &334847359
 GameObject:
   m_ObjectHideFlags: 0
@@ -279,7 +274,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   IsActive: 1
-  Strength: 100
+  Strength: 1
   Type: 0
 --- !u!136 &334847361
 CapsuleCollider:
@@ -402,7 +397,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   IsActive: 1
-  Strength: 100
+  Strength: 10
   Type: 0
 --- !u!136 &671477161
 CapsuleCollider:
@@ -715,7 +710,7 @@ GameObject:
   - component: {fileID: 962515696}
   - component: {fileID: 962515695}
   - component: {fileID: 962515694}
-  - component: {fileID: 962515693}
+  - component: {fileID: 962515698}
   m_Layer: 0
   m_Name: SimpleAgent (4)
   m_TagString: Untagged
@@ -723,23 +718,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &962515693
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 962515692}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2a7f62e8937917b4396546f2461ef90b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  moveSpeed: 3
-  rotationSpeed: 5
-  fieldInfluence: 1
-  randomVariance: 0.2
-  debugScalar: 30
 --- !u!135 &962515694
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -826,6 +804,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &962515698
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 962515692}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1e507f1c6cacdf54084ff30cf35dbb11, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1022048307
 GameObject:
   m_ObjectHideFlags: 0
@@ -838,7 +828,7 @@ GameObject:
   - component: {fileID: 1022048311}
   - component: {fileID: 1022048310}
   - component: {fileID: 1022048309}
-  - component: {fileID: 1022048308}
+  - component: {fileID: 1022048313}
   m_Layer: 0
   m_Name: SimpleAgent (5)
   m_TagString: Untagged
@@ -846,23 +836,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1022048308
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1022048307}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2a7f62e8937917b4396546f2461ef90b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  moveSpeed: 3
-  rotationSpeed: 5
-  fieldInfluence: 1
-  randomVariance: 0.2
-  debugScalar: 30
 --- !u!135 &1022048309
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -949,6 +922,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1022048313
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1022048307}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1e507f1c6cacdf54084ff30cf35dbb11, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1225419178
 GameObject:
   m_ObjectHideFlags: 0
@@ -980,14 +965,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 44ae17e44e6f80c41af6df8e751f9806, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  vffCalculatorShader: {fileID: 7200000, guid: d66b4603c7ff2ea49b82314f4b87bdf8, type: 3}
+  vffCalculatorShader: {fileID: 7200000, guid: 110867f075194224ab0c23cf66f35790, type: 3}
   boundaryGeneratorShader: {fileID: 7200000, guid: ad0e78ee4ad311b47a8c58e3d7c64a5c, type: 3}
-  resolution: {x: 1024, y: 1024}
-  maxInfluenceStrength: 100
-  viscosityCoefficient: 1
-  pressureCoefficient: 100
-  iterationCount: 100
+  resolution: {x: 512, y: 512}
+  maxInfluenceStrength: 2
+  viscosityCoefficient: 2
+  pressureCoefficient: 0.5
+  iterationCount: 50
   visualizeField: 1
+  velocityVisualization: 1
   navMeshDetailLevel: 0.5
   frameByFrame: 1
   visualizationMaterial: {fileID: 0}
@@ -1096,7 +1082,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   IsActive: 1
-  Strength: 100
+  Strength: 1
   Type: 1
 --- !u!136 &1411365761
 CapsuleCollider:
@@ -1198,31 +1184,14 @@ GameObject:
   - component: {fileID: 1425474569}
   - component: {fileID: 1425474568}
   - component: {fileID: 1425474567}
-  - component: {fileID: 1425474566}
+  - component: {fileID: 1425474571}
   m_Layer: 0
-  m_Name: SimpleAgent
+  m_Name: SimpleAgent (0)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1425474566
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1425474565}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2a7f62e8937917b4396546f2461ef90b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  moveSpeed: 3
-  rotationSpeed: 5
-  fieldInfluence: 1
-  randomVariance: 0.2
-  debugScalar: 30
 --- !u!135 &1425474567
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -1309,6 +1278,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1425474571
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1425474565}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1e507f1c6cacdf54084ff30cf35dbb11, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1682635785
 GameObject:
   m_ObjectHideFlags: 0
@@ -1436,7 +1417,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   IsActive: 1
-  Strength: 100
+  Strength: 10
   Type: 0
 --- !u!136 &1941716777
 CapsuleCollider:
@@ -1538,7 +1519,7 @@ GameObject:
   - component: {fileID: 2003150274}
   - component: {fileID: 2003150273}
   - component: {fileID: 2003150272}
-  - component: {fileID: 2003150271}
+  - component: {fileID: 2003150276}
   m_Layer: 0
   m_Name: SimpleAgent (3)
   m_TagString: Untagged
@@ -1546,23 +1527,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &2003150271
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2003150270}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2a7f62e8937917b4396546f2461ef90b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  moveSpeed: 3
-  rotationSpeed: 5
-  fieldInfluence: 1
-  randomVariance: 0.2
-  debugScalar: 30
 --- !u!135 &2003150272
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -1649,6 +1613,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2003150276
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2003150270}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1e507f1c6cacdf54084ff30cf35dbb11, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &2007701651
 GameObject:
   m_ObjectHideFlags: 0
@@ -1753,7 +1729,7 @@ GameObject:
   - component: {fileID: 2007890734}
   - component: {fileID: 2007890733}
   - component: {fileID: 2007890732}
-  - component: {fileID: 2007890731}
+  - component: {fileID: 2007890736}
   m_Layer: 0
   m_Name: SimpleAgent (1)
   m_TagString: Untagged
@@ -1761,23 +1737,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &2007890731
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2007890730}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2a7f62e8937917b4396546f2461ef90b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  moveSpeed: 3
-  rotationSpeed: 5
-  fieldInfluence: 1
-  randomVariance: 0.2
-  debugScalar: 30
 --- !u!135 &2007890732
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -1864,6 +1823,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2007890736
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2007890730}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1e507f1c6cacdf54084ff30cf35dbb11, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

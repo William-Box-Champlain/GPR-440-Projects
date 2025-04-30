@@ -52,7 +52,6 @@ void Advect(uint3 id : SV_DispatchThreadID)
     float2 vel = Velocity[id.xy];
     float2 prevPos = uv - vel * DT;
     {
-        // Convert prevPos (in UV space) to pixel space coordinates.
         float2 pos = prevPos / TexelSize;
         int2 ipos = int2(floor(pos));
         float2 f = pos - ipos;
@@ -61,8 +60,6 @@ void Advect(uint3 id : SV_DispatchThreadID)
         float2 v01 = Velocity.Load(int3(ipos + int2(0, 1), 0));
         float2 v11 = Velocity.Load(int3(ipos + int2(1, 1), 0));
         float2 interpolated = lerp(lerp(v00, v10, f.x), lerp(v01, v11, f.x), f.y);
-        // NOTE: No clamping is applied when sampling neighboring velocities.
-        // Consider clamping the computed indices to valid texture coordinates to avoid out-of-bound access.
         PrevVelocity[id.xy] = interpolated;
     }
 }
@@ -137,10 +134,6 @@ void SolvePressure(uint3 id : SV_DispatchThreadID)
             count += 1.0;
         }
     }
-    // NOTE: The neighboring indices (nID) are not clamped to the texture dimensions.
-    // This may lead to out-of-bound access when processing edge pixels.
-    // Consider clamping nID using:
-    //     nID = clamp(id.xy + offsets[i], uint2(0, 0), uint2(width - 1, height - 1));
     
     float b = Divergence[id.xy];
     PressureOut[id.xy] = (p - DX * DX * b) / max(count, 1.0);

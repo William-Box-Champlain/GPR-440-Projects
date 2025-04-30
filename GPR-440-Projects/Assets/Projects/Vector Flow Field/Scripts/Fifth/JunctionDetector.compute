@@ -1,0 +1,182 @@
+// JunctionDetector.compute - Detect junction points in the navigation texture
+
+#pragma kernel DetectJunctions
+
+// Input
+Texture2D<float4> NavigationTexture;
+SamplerState sampler_NavigationTexture;
+
+// Output
+RWTexture2D<float> JunctionCandidates;
+
+// Parameters
+float JunctionThreshold = 0.5f;
+int KernelSize = 3;
+
+// Constants
+static const int2 offsets[8] = {
+    int2(-1, -1), int2(0, -1), int2(1, -1),
+    int2(-1, 0),               int2(1, 0),
+    int2(-1, 1),  int2(0, 1),  int2(1, 1)
+};
+
+// Returns 1.0 if the pixel is navigable (part of a path), 0.0 otherwise
+float IsNavigable(uint2 pos)
+{
+    float4 pixel = NavigationTexture[pos];
+    // In the NavMesh texture, navigable areas are usually represented by non-zero alpha
+    // or by specific color channels. Adjust this logic based on your NavMesh texture format.
+    return pixel.b > 0.5f ? 1.0f : 0.0f;
+}
+
+// Counts the number of connected components in the 3x3 neighborhood
+int CountConnectedComponents(uint2 center)
+{
+    // If center pixel is not navigable, it can't be a junction
+    if (IsNavigable(center) < 0.5f) return 0;
+    
+    // We use a flood fill approach to count connected components
+    // First, create a 3x3 grid around the center
+    bool grid[9];
+    
+    // Fill the grid with navigable status (true = navigable)
+    grid[0] = IsNavigable(center + int2(-1, -1)) > 0.5f;
+    grid[1] = IsNavigable(center + int2(0, -1)) > 0.5f;
+    grid[2] = IsNavigable(center + int2(1, -1)) > 0.5f;
+    grid[3] = IsNavigable(center + int2(-1, 0)) > 0.5f;
+    grid[4] = true; // Center is already checked
+    grid[5] = IsNavigable(center + int2(1, 0)) > 0.5f;
+    grid[6] = IsNavigable(center + int2(-1, 1)) > 0.5f;
+    grid[7] = IsNavigable(center + int2(0, 1)) > 0.5f;
+    grid[8] = IsNavigable(center + int2(1, 1)) > 0.5f;
+    
+    // Construct border connectivity
+    // For each pixel on border, which other border pixels is it connected to?
+    bool visited[9] = { false, false, false, false, false, false, false, false, false };
+    int components = 0;
+    
+    // Start flood fills from unvisited border pixels
+    for (int i = 0; i < 9; i++) {
+        // Skip center and non-navigable or already visited pixels
+        if (i == 4 || !grid[i] || visited[i]) continue;
+        
+        // Start a new component
+        components++;
+        
+        // Flood fill from this pixel using a stack
+        // In HLSL we can't use recursion or dynamic data structures,
+        // so we'll do a simplified flood fill with a fixed-size stack
+        int stack[8]; // Max 8 pixels can be in stack
+        int stackSize = 1;
+        stack[0] = i;
+        visited[i] = true;
+        
+        while (stackSize > 0) {
+            // Pop from stack
+            int current = stack[stackSize - 1];
+            stackSize--;
+            
+            // Check all 8 neighbors
+            int row = current / 3;
+            int col = current % 3;
+            
+            for (int dr = -1; dr <= 1; dr++) {
+                for (int dc = -1; dc <= 1; dc++) {
+                    if (dr == 0 && dc == 0) continue;
+                    
+                    int nr = row + dr;
+                    int nc = col + dc;
+                    
+                    // Check if in bounds of 3x3 grid
+                    if (nr < 0 || nr > 2 || nc < 0 || nc > 2) continue;
+                    
+                    int neighbor = nr * 3 + nc;
+                    
+                    // If navigable and not visited, add to stack
+                    if (grid[neighbor] && !visited[neighbor]) {
+                        visited[neighbor] = true;
+                        stack[stackSize] = neighbor;
+                        stackSize++;
+                    }
+                }
+            }
+        }
+    }
+    
+    return components;
+}
+
+// Alternative method using pattern recognition for junction detection
+float DetectJunctionPattern(uint2 center)
+{
+    // Only consider navigable pixels
+    if (IsNavigable(center) < 0.5f) return 0.0f;
+    
+    // Check for junction patterns (3-way, 4-way intersections)
+    // We look at the 4 main neighbors (N, E, S, W) and count navigable ones
+    int navigableNeighbors = 0;
+    navigableNeighbors += IsNavigable(center + int2(0, -1)) > 0.5f ? 1 : 0; // North
+    navigableNeighbors += IsNavigable(center + int2(1, 0)) > 0.5f ? 1 : 0;  // East
+    navigableNeighbors += IsNavigable(center + int2(0, 1)) > 0.5f ? 1 : 0;  // South
+    navigableNeighbors += IsNavigable(center + int2(-1, 0)) > 0.5f ? 1 : 0; // West
+    
+    // Get diagonal neighbors too
+    int diagNeighbors = 0;
+    diagNeighbors += IsNavigable(center + int2(-1, -1)) > 0.5f ? 1 : 0; // NW
+    diagNeighbors += IsNavigable(center + int2(1, -1)) > 0.5f ? 1 : 0;  // NE
+    diagNeighbors += IsNavigable(center + int2(-1, 1)) > 0.5f ? 1 : 0;  // SW
+    diagNeighbors += IsNavigable(center + int2(1, 1)) > 0.5f ? 1 : 0;   // SE
+    
+    // Calculate junction score - higher for more complex junctions
+    float junctionScore = 0.0f;
+    
+    // T-junctions or more complex (3 or more primary directions)
+    if (navigableNeighbors >= 3) {
+        junctionScore = 0.7f + (navigableNeighbors - 3) * 0.3f; // 0.7 for T-junction, 1.0 for 4-way
+    }
+    // L-junctions with diagonal connector
+    else if (navigableNeighbors == 2 && diagNeighbors >= 1) {
+        // Check if the two navigable neighbors are adjacent (L-shape)
+        bool isLShape = false;
+        
+        if (IsNavigable(center + int2(0, -1)) > 0.5f && IsNavigable(center + int2(1, 0)) > 0.5f) isLShape = true;  // NE
+        if (IsNavigable(center + int2(1, 0)) > 0.5f && IsNavigable(center + int2(0, 1)) > 0.5f) isLShape = true;   // SE
+        if (IsNavigable(center + int2(0, 1)) > 0.5f && IsNavigable(center + int2(-1, 0)) > 0.5f) isLShape = true;  // SW
+        if (IsNavigable(center + int2(-1, 0)) > 0.5f && IsNavigable(center + int2(0, -1)) > 0.5f) isLShape = true; // NW
+        
+        if (isLShape) {
+            junctionScore = 0.4f + diagNeighbors * 0.1f;
+        }
+    }
+    
+    return junctionScore;
+}
+
+[numthreads(8, 8, 1)]
+void DetectJunctions(uint3 id : SV_DispatchThreadID)
+{
+    uint width, height;
+    NavigationTexture.GetDimensions(width, height);
+    
+    // Skip out of bounds pixels
+    if (id.x >= width || id.y >= height) return;
+    
+    // Skip border pixels
+    if (id.x < 1 || id.x >= width - 1 || id.y < 1 || id.y >= height - 1) {
+        JunctionCandidates[id.xy] = 0.0f;
+        return;
+    }
+    
+    // Method 1: Connected components approach
+    int components = CountConnectedComponents(id.xy);
+    float componentScore = components >= 2 ? (components - 1) * 0.25f : 0.0f;
+    
+    // Method 2: Pattern-based detection
+    float patternScore = DetectJunctionPattern(id.xy);
+    
+    // Combine scores, favoring the higher one
+    float junctionScore = max(componentScore, patternScore);
+    
+    // Output junction score
+    JunctionCandidates[id.xy] = junctionScore;
+}
