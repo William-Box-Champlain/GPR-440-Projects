@@ -59,17 +59,22 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\VectorFieldStorage.cs" />
+    <Compile Include="Assets\Projects\ServiceLocator\ServiceLocatorGlobal.cs" />
     <Compile Include="Assets\Projects\GOAP\Scripts\GoapFactory.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Final\Helpers.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\First Pass\Grid.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\VectorFlowFieldAgent.cs" />
+    <Compile Include="Assets\Projects\ServiceLocator\ServiceManager.cs" />
+    <Compile Include="Assets\Projects\Utilities\GameObjectExtensions.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\sixth\GoalManager.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\Agent.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\ResolutionBiasController.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\AgentQuerySystem.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\ChunkedProcessingSystem.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\First Pass\FlowFieldAgent.cs" />
+    <Compile Include="Assets\Projects\Utilities\Timer.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Third Pass\VectorFieldManager.cs" />
+    <Compile Include="Assets\Projects\ServiceLocator\Bootstrapper.cs" />
     <Compile Include="Assets\Projects\Scenario_Generation\WFCGameObject.cs" />
     <Compile Include="Assets\Projects\Scenario_Generation\WFCManager.cs" />
     <Compile Include="Assets\Projects\GOAP\Scripts\Beliefs.cs" />
@@ -78,8 +83,10 @@
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\ResolutionBiasControllerEditor.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\First Pass\FlowFieldManager.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\sixth\AgentManager.cs" />
+    <Compile Include="Assets\Projects\ServiceLocator\ServiceLocatorScene.cs" />
     <Compile Include="Assets\Projects\Scenario_Generation\bezier-classes.cs" />
     <Compile Include="Assets\Projects\GOAP\Scripts\Goals.cs" />
+    <Compile Include="Assets\Projects\Dependency Injection\Injector.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\sixth\VectorFieldManager.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\Solver.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Third Pass\VectorFieldSink.cs" />
@@ -93,6 +100,8 @@
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\PathfinderStartup.cs" />
     <Compile Include="Assets\Projects\GOAP\Scripts\GoapPlanner.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\VFFCalculatorInterface.cs" />
+    <Compile Include="Assets\Projects\ServiceLocator\ServiceLocator.cs" />
+    <Compile Include="Assets\Projects\Utilities\Vector3Extensions.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\VFFInfluenceObject.cs" />
     <Compile Include="Assets\Projects\GOAP\Scripts\Action.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\MultiResolutionVectorFieldGenerator .cs" />
@@ -107,14 +116,11 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\Density Compute\Visualization.hlsl" />
-    <None Include="Assets\PolygonPrototype\Shaders\Prototype_Glass_Global.shader" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\JunctionDetector.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\sixth\VFFPathfinder.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Third Pass\FluidSimulation.compute" />
-    <None Include="Assets\PolygonPrototype\Shaders\Prototype_Object.shader" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\BiasGenerator.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\BoundsCalculator.compute" />
-    <None Include="Assets\PolygonPrototype\Shaders\Prototype_Global.shader" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\FlowField.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\Density Compute\Helpers.hlsl" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\ConservativeDownsample.shader" />
@@ -131,7 +137,6 @@
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\Density Compute\Density.hlsl" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\NavierStokesSolver.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\BoundsCalculator_Optimized.compute" />
-    <None Include="Assets\PolygonPrototype\Shaders\Prototype_Glass_Object.shader" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\DensityAdvection.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\VectorFieldPropagation.compute" />
   </ItemGroup>

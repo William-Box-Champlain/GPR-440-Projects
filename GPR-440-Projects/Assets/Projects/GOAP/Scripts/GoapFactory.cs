@@ -1,21 +1,22 @@
+using DependencyInjection;
+using UnityServiceLocator;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace GOAP
 {
-    public class GoapFactory : MonoBehaviour
+    public class GoapFactory : MonoBehaviour, IDependencyProvider
     {
-        // Start is called before the first frame update
-        void Start()
+        void Awake()
         {
-
+            ServiceLocator.Global.Register(this);
         }
+        [Provide] public GoapFactory ProvideFactory() => this;
 
-        // Update is called once per frame
-        void Update()
+        public IGoapPlanner CreatePlanner()
         {
-
+            return new GoapPlanner();
         }
     }
 }

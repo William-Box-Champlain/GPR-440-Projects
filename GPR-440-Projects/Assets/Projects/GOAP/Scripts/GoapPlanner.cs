@@ -9,7 +9,7 @@ namespace GOAP
     {
         ActionPlan Plan(GoapAgent agent, HashSet<Goal> goals, Goal mostRecentGoal = null);
     }
-    public class GoapPlanner
+    public class GoapPlanner : IGoapPlanner
     {
         public ActionPlan Plan(GoapAgent agent, HashSet<Goal> goals, Goal mostRecentGoal = null)
         {
@@ -22,19 +22,24 @@ namespace GOAP
             {
                 Node goalNode = new Node(null, null, goal.EndState, 0);
 
-                //TODO:
-                //if(FindPath(goalNode, agent.actions))
-                //{
-                //    if (goalNode.IsLeafDead) continue;
-                //    Stack<Action> actionStack = new Stack<Action>();
-                //    while(goalNode.Leaves.Count > 0)
-                //    {
-                //        var cheapestLeaf = goalNode.Leaves.OrderBy(leaf => leaf.Cost).First();
-                //        goalNode = cheapestLeaf;
-                //        actionStack.Push(cheapestLeaf.Action);
-                //    }
-                //    return new ActionPlan(goal, actionStack, goalNode.Cost);
-                //}
+                if(FindPath(goalNode, agent.actions))
+                {
+                    if (goalNode.IsLeafDead) continue;
+                    Stack<Action> actionStack = new Stack<Action>();
+                    Node currentNode = goalNode;
+                    
+                    while(currentNode.Leaves.Count > 0)
+                    {
+                        var cheapestLeaf = currentNode.Leaves.OrderBy(leaf => leaf.Cost).First();
+                        currentNode = cheapestLeaf;
+                        
+                        if (currentNode.Action != null)
+                        {
+                            actionStack.Push(currentNode.Action);
+                        }
+                    }
+                    return new ActionPlan(goal, actionStack, currentNode.Cost);
+                }
             }
             Debug.LogWarning("No plan found");
             return null;
@@ -42,7 +47,106 @@ namespace GOAP
 
         bool FindPath(Node parent, HashSet<Action> actions)
         {
-            return EasySearch(parent, actions);
+            // First try with A* search
+            bool aStarResult = AStarSearch(parent, actions);
+            
+            // If A* failed or didn't produce enough leaves, try EasySearch as fallback
+            if (!aStarResult || parent.Leaves.Count == 0)
+            {
+                return EasySearch(parent, actions);
+            }
+            
+            return aStarResult;
+        }
+
+        /// <summary>
+        /// A* search algorithm for finding an optimal action plan
+        /// </summary>
+        /// <param name="goalNode">The node containing goal beliefs</param>
+        /// <param name="availableActions">Available actions to use</param>
+        /// <returns>True if a plan was found, false otherwise</returns>
+        bool AStarSearch(Node goalNode, HashSet<Action> availableActions)
+        {
+            // Priority queue for nodes to explore (sorted by cost)
+            var openSet = new List<Node>();
+            
+            // Set of visited states to avoid cycles
+            var closedSet = new HashSet<string>();
+            
+            // Add the goal node to the open set
+            openSet.Add(goalNode);
+            
+            while (openSet.Count > 0)
+            {
+                // Get the node with lowest cost
+                openSet.Sort((a, b) => a.Cost.CompareTo(b.Cost));
+                var current = openSet[0];
+                openSet.RemoveAt(0);
+                
+                // Skip if we've already processed this state
+                string stateKey = GetStateKey(current.RequiredEffects);
+                if (closedSet.Contains(stateKey))
+                {
+                    continue;
+                }
+                
+                closedSet.Add(stateKey);
+                
+                // Check if all required beliefs are satisfied
+                var unsatisfiedBeliefs = new HashSet<Belief>(current.RequiredEffects);
+                unsatisfiedBeliefs.RemoveWhere(belief => belief.Evaluate());
+                
+                if (unsatisfiedBeliefs.Count == 0)
+                {
+                    // We've found a valid plan!
+                    return true;
+                }
+                
+                // Try each action that could help satisfy our requirements
+                foreach (var action in availableActions)
+                {
+                    // Skip actions that don't provide any required effects
+                    if (!action.Effects.Any(unsatisfiedBeliefs.Contains))
+                    {
+                        continue;
+                    }
+                    
+                    // Create a new set of required effects
+                    var newRequiredEffects = new HashSet<Belief>(unsatisfiedBeliefs);
+                    
+                    // Remove effects this action provides
+                    newRequiredEffects.ExceptWith(action.Effects);
+                    
+                    // Add this action's preconditions
+                    newRequiredEffects.UnionWith(action.Preconditions);
+                    
+                    // Create new available actions set without this action to avoid cycles
+                    var newAvailableActions = new HashSet<Action>(availableActions);
+                    newAvailableActions.Remove(action);
+                    
+                    // Create a new node
+                    var newNode = new Node(current, action, newRequiredEffects, current.Cost + action.Cost);
+                    
+                    // Add the new node to the open set
+                    openSet.Add(newNode);
+                    
+                    // Also add it as a leaf to the current node
+                    current.Leaves.Add(newNode);
+                }
+            }
+            
+            // If we've exhausted all possibilities without finding a solution
+            return goalNode.Leaves.Count > 0;
+        }
+
+        /// <summary>
+        /// Creates a unique string key for a set of beliefs
+        /// </summary>
+        /// <param name="beliefs">Set of beliefs</param>
+        /// <returns>String key</returns>
+        private string GetStateKey(HashSet<Belief> beliefs)
+        {
+            return string.Join(";", beliefs.Select(b => b.Name).OrderBy(name => name));
         }
 
         bool EasySearch(Node parent, HashSet<Action> actions)

@@ -5,6 +5,57 @@ using Unity;
 
 namespace GOAP
 {
+    public class BeliefFactory
+    {
+        readonly GoapAgent agent;
+        readonly Dictionary<string, Belief> beliefMap;
+
+        public BeliefFactory(GoapAgent agent, Dictionary<string, Belief> beliefMap)
+        {
+            this.agent = agent;
+            this.beliefMap = beliefMap;
+        }
+
+        public void AddBelief(string key, Func<bool> condition)
+        {
+            beliefMap.Add
+                (
+                key,
+                new Belief.BeliefBuilder(key)
+                .WithCondition(condition)
+                .Build()
+                );
+        }
+
+        public void AddSensorBelief(string key, Func<bool> condition)
+        {
+            beliefMap.Add(
+                key,
+                new Belief.BeliefBuilder(key)
+                .WithCondition(condition)
+                .Build()
+                );
+        }
+
+        public void AddLocationBelief(string key, float range, Transform location)
+        {
+            AddLocationBelief(key, range, location.position);
+        }
+
+        public void AddLocationBelief(string key, float range, Vector3 location)
+        {
+            beliefMap.Add
+                (
+                key,
+                new Belief.BeliefBuilder(key)
+                .WithCondition(() => InRange(location, range))
+                .WithLocation(() => location)
+                .Build()
+                );
+        }
+
+        bool InRange(UnityEngine.Vector3 position, float range) => UnityEngine.Vector3.Distance(agent.transform.position, position) < range;
+    }
     public class Belief
     {
         #region member-variables
@@ -12,6 +63,8 @@ namespace GOAP
 
         Func<bool> condition = () => default;
         Func<UnityEngine.Vector3> observation = () => default;
+
+        public Vector3 Location => observation();
         #endregion
 
         #region constructors
@@ -50,58 +103,6 @@ namespace GOAP
             {
                 return belief;
             }
-        }
-
-        public class BeliefFactory
-        {
-            readonly GoapAgent agent;
-            readonly Dictionary<string, Belief> beliefMap;
-
-            public BeliefFactory(GoapAgent agent, Dictionary<string, Belief> beliefMap)
-            {
-                this.agent = agent;
-                this.beliefMap = beliefMap;
-            }
-
-            public void AddBelief(string key, Func<bool> condition)
-            {
-                beliefMap.Add
-                    (
-                    key,
-                    new Belief.BeliefBuilder(key)
-                    .WithCondition(condition)
-                    .Build()
-                    );
-            }
-
-            public void AddSensorBelief(string key, Func<bool> condition)
-            {
-                beliefMap.Add(
-                    key,
-                    new Belief.BeliefBuilder(key)
-                    .WithCondition(condition)
-                    .Build()
-                    );
-            }
-
-            public void AddLocationBelief(string key, float range, Transform location)
-            {
-                AddLocationBelief(key, range, location.position);
-            }
-
-            public void AddLocationBelief(string key, float range, Vector3 location)
-            {
-                beliefMap.Add
-                    (
-                    key,
-                    new Belief.BeliefBuilder(key)
-                    .WithCondition(() => InRange(location, range))
-                    .WithLocation(() => location)
-                    .Build()
-                    );
-            }
-
-            bool InRange(UnityEngine.Vector3 position, float range) => UnityEngine.Vector3.Distance(agent.transform.position, position) < range;
         }
     }
 

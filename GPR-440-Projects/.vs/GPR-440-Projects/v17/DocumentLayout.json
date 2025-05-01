@@ -3,64 +3,28 @@
   "WorkspaceRootPath": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\final\\helpers.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\final\\helpers.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\servicelocator\\servicelocator.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\servicelocator\\servicelocator.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\final\\flowfieldpathfindingmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\final\\flowfieldpathfindingmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\servicelocator\\servicemanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\servicelocator\\servicemanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\sixth\\vffpathfinder.compute||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\sixth\\vffpathfinder.compute||{8B382828-6202-11D1-8870-0000F87579D2}"
+      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\goap\\scripts\\strategies.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\goap\\scripts\\strategies.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\third pass\\fluidsimulation.compute||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\third pass\\fluidsimulation.compute||{8B382828-6202-11D1-8870-0000F87579D2}"
+      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\utilities\\vector3extensions.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\utilities\\vector3extensions.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\fifth\\multiresolutionvectorfieldgenerator .cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fifth\\multiresolutionvectorfieldgenerator .cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\assets\\projects\\goap\\scripts\\sensor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\goap\\scripts\\sensor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\fifth\\biasgenerator.compute||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fifth\\biasgenerator.compute||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\third pass\\vectorfieldsink.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\third pass\\vectorfieldsink.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{32429C73-B196-9764-2741-319F44221039}|VFF.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\second pass\\navierstokescompute.compute||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{32429C73-B196-9764-2741-319F44221039}|VFF.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\second pass\\navierstokescompute.compute||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{32429C73-B196-9764-2741-319F44221039}|VFF.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\second pass\\navierstokessolver.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{32429C73-B196-9764-2741-319F44221039}|VFF.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\second pass\\navierstokessolver.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{32429C73-B196-9764-2741-319F44221039}|VFF.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\second pass\\fieldtexturegenerator.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{32429C73-B196-9764-2741-319F44221039}|VFF.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\second pass\\fieldtexturegenerator.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\fourth pass\\vffinfluenceobject.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fourth pass\\vffinfluenceobject.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\fourth pass\\boundscalculator.compute||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\fourth pass\\boundscalculator.compute||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\first pass\\navierstokes.compute||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\first pass\\navierstokes.compute||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\first pass\\grid.compute||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\first pass\\grid.compute||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|d:\\users\\will\\code\\github\\gpr-440-projects\\gpr-440-projects\\assets\\projects\\vector flow field\\scripts\\first pass\\flowfieldmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\vector flow field\\scripts\\first pass\\flowfieldmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\assets\\projects\\goap\\scripts\\goapagent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{FCEE95AF-B3B4-3E18-D6BA-4B4C08514E61}|Assembly-CSharp.csproj|solutionrelative:assets\\projects\\goap\\scripts\\goapagent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -79,197 +43,78 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
-              "Title": "Helpers.cs",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Final\\Helpers.cs",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Final\\Helpers.cs",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Final\\Helpers.cs",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Final\\Helpers.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABkAAAAJAAAAAAAAAA==",
+              "Title": "ServiceLocator.cs",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\ServiceLocator\\ServiceLocator.cs",
+              "RelativeDocumentMoniker": "Assets\\Projects\\ServiceLocator\\ServiceLocator.cs",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\ServiceLocator\\ServiceLocator.cs",
+              "RelativeToolTip": "Assets\\Projects\\ServiceLocator\\ServiceLocator.cs",
+              "ViewState": "AgIAAEoAAAAAAAAAAAAIwD0AAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-04-21T11:04:17.152Z",
+              "WhenOpened": "2025-05-01T07:28:18.024Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 1,
-              "Title": "FlowFieldPathfindingManager.cs",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Final\\FlowFieldPathfindingManager.cs",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Final\\FlowFieldPathfindingManager.cs",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Final\\FlowFieldPathfindingManager.cs",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Final\\FlowFieldPathfindingManager.cs",
-              "ViewState": "AgIAAAYAAAAAAAAAAAAAAHgAAAA8AAAAAAAAAA==",
+              "Title": "ServiceManager.cs",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\ServiceLocator\\ServiceManager.cs",
+              "RelativeDocumentMoniker": "Assets\\Projects\\ServiceLocator\\ServiceManager.cs",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\ServiceLocator\\ServiceManager.cs",
+              "RelativeToolTip": "Assets\\Projects\\ServiceLocator\\ServiceManager.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA0AAAAJAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-04-21T11:01:28.14Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "VFFPathfinder.compute",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\sixth\\VFFPathfinder.compute",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\sixth\\VFFPathfinder.compute",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\sixth\\VFFPathfinder.compute",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\sixth\\VFFPathfinder.compute",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAJIAAAAMAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
-              "WhenOpened": "2025-04-21T10:53:45.987Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "MultiResolutionVectorFieldGenerator .cs",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fifth\\MultiResolutionVectorFieldGenerator .cs",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fifth\\MultiResolutionVectorFieldGenerator .cs",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fifth\\MultiResolutionVectorFieldGenerator .cs",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fifth\\MultiResolutionVectorFieldGenerator .cs",
-              "ViewState": "AgIAABYBAAAAAAAAAAAuwAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-04-21T10:53:17.929Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "BiasGenerator.compute",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fifth\\BiasGenerator.compute",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fifth\\BiasGenerator.compute",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fifth\\BiasGenerator.compute",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fifth\\BiasGenerator.compute",
-              "ViewState": "AgIAADwAAAAAAAAAAAAAAB4AAAASAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
-              "WhenOpened": "2025-04-21T10:52:43.86Z",
+              "WhenOpened": "2025-05-01T07:27:57.056Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 3,
-              "Title": "FluidSimulation.compute",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Third Pass\\FluidSimulation.compute",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Third Pass\\FluidSimulation.compute",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Third Pass\\FluidSimulation.compute",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Third Pass\\FluidSimulation.compute",
-              "ViewState": "AgIAAJYBAAAAAAAAAAAkwLQBAAAiAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
-              "WhenOpened": "2025-04-21T10:47:03.762Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 6,
-              "Title": "VectorFieldSink.cs",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Third Pass\\VectorFieldSink.cs",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Third Pass\\VectorFieldSink.cs",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Third Pass\\VectorFieldSink.cs",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Third Pass\\VectorFieldSink.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Title": "Vector3Extensions.cs",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Utilities\\Vector3Extensions.cs",
+              "RelativeDocumentMoniker": "Assets\\Projects\\Utilities\\Vector3Extensions.cs",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Utilities\\Vector3Extensions.cs",
+              "RelativeToolTip": "Assets\\Projects\\Utilities\\Vector3Extensions.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAsAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-04-21T10:46:57.056Z",
+              "WhenOpened": "2025-05-01T07:23:33.464Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
-              "Title": "NavierStokesCompute.compute",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\NavierStokesCompute.compute",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\NavierStokesCompute.compute",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\NavierStokesCompute.compute",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\NavierStokesCompute.compute",
-              "ViewState": "AgIAAG0AAAAAAAAAAAAwwIgAAAAmAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
-              "WhenOpened": "2025-04-21T10:41:41.49Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 8,
-              "Title": "NavierStokesSolver.cs",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\NavierStokesSolver.cs",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\NavierStokesSolver.cs",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\NavierStokesSolver.cs",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\NavierStokesSolver.cs",
-              "ViewState": "AgIAAHQCAAAAAAAAAAAQwAAAAAAAAAAAAAAAAA==",
+              "DocumentIndex": 2,
+              "Title": "Strategies.cs",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\GOAP\\Scripts\\Strategies.cs",
+              "RelativeDocumentMoniker": "Assets\\Projects\\GOAP\\Scripts\\Strategies.cs",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\GOAP\\Scripts\\Strategies.cs",
+              "RelativeToolTip": "Assets\\Projects\\GOAP\\Scripts\\Strategies.cs",
+              "ViewState": "AgIAAFAAAAAAAAAAAAAYwGEAAAAvAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-04-21T10:40:50.594Z",
+              "WhenOpened": "2025-05-01T06:29:16.103Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 9,
-              "Title": "FieldTextureGenerator.cs",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\FieldTextureGenerator.cs",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\FieldTextureGenerator.cs",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\FieldTextureGenerator.cs",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Second Pass\\FieldTextureGenerator.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABcAAAAWAAAAAAAAAA==",
+              "DocumentIndex": 4,
+              "Title": "Sensor.cs",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\GOAP\\Scripts\\Sensor.cs",
+              "RelativeDocumentMoniker": "Assets\\Projects\\GOAP\\Scripts\\Sensor.cs",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\GOAP\\Scripts\\Sensor.cs",
+              "RelativeToolTip": "Assets\\Projects\\GOAP\\Scripts\\Sensor.cs",
+              "ViewState": "AgIAABQAAAAAAAAAAAAQwAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-04-21T10:40:40.563Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-05-01T06:29:14.63Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 10,
-              "Title": "VFFInfluenceObject.cs",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VFFInfluenceObject.cs",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VFFInfluenceObject.cs",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VFFInfluenceObject.cs",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\VFFInfluenceObject.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABoAAAAcAAAAAAAAAA==",
+              "DocumentIndex": 5,
+              "Title": "GoapAgent.cs",
+              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\GOAP\\Scripts\\GoapAgent.cs",
+              "RelativeDocumentMoniker": "Assets\\Projects\\GOAP\\Scripts\\GoapAgent.cs",
+              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\GOAP\\Scripts\\GoapAgent.cs",
+              "RelativeToolTip": "Assets\\Projects\\GOAP\\Scripts\\GoapAgent.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACoAAAAwAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-04-21T10:37:33.162Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 11,
-              "Title": "BoundsCalculator.compute",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\BoundsCalculator.compute",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\BoundsCalculator.compute",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\BoundsCalculator.compute",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\Fourth Pass\\BoundsCalculator.compute",
-              "ViewState": "AgIAAB4AAAAAAAAAAAAAAEEAAABJAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
-              "WhenOpened": "2025-04-21T10:34:11.501Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 12,
-              "Title": "NavierStokes.compute",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\First Pass\\NavierStokes.compute",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\First Pass\\NavierStokes.compute",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\First Pass\\NavierStokes.compute",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\First Pass\\NavierStokes.compute",
-              "ViewState": "AgIAAHUAAAAAAAAAAAAAAIgAAAAEAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
-              "WhenOpened": "2025-04-21T10:28:01.297Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 13,
-              "Title": "Grid.compute",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\First Pass\\Grid.compute",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\First Pass\\Grid.compute",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\First Pass\\Grid.compute",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\First Pass\\Grid.compute",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAD8AAAAmAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
-              "WhenOpened": "2025-04-21T10:16:29.345Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 14,
-              "Title": "FlowFieldManager.cs",
-              "DocumentMoniker": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\First Pass\\FlowFieldManager.cs",
-              "RelativeDocumentMoniker": "Assets\\Projects\\Vector Flow Field\\Scripts\\First Pass\\FlowFieldManager.cs",
-              "ToolTip": "D:\\Users\\Will\\Code\\GitHub\\GPR-440-Projects\\GPR-440-Projects\\Assets\\Projects\\Vector Flow Field\\Scripts\\First Pass\\FlowFieldManager.cs",
-              "RelativeToolTip": "Assets\\Projects\\Vector Flow Field\\Scripts\\First Pass\\FlowFieldManager.cs",
-              "ViewState": "AgIAAL0AAAAAAAAAAAAAwHwAAAAoAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-04-21T09:53:21.544Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-04-30T20:47:45.701Z"
             }
           ]
         }

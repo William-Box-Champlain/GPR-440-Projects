@@ -1,3 +1,4 @@
+using DependencyInjection;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,7 +24,24 @@ namespace GOAP
 
         Goal LastGoal;
         public Goal CurrentGoal;
-        //public Plan
+        public ActionPlan ActionPlan;
+        public Action currentAction;
+
+        public Dictionary<string, Belief> beliefs;
+        public HashSet<Action> actions;
+        public HashSet<Goal> goals;
+
+        [Inject] GoapFactory gFactory;
+        IGoapPlanner gPlanner;
+
+        private void Awake()
+        {
+            Agent = GetComponent<NavMeshAgent>();
+            rb = GetComponent<Rigidbody>();
+            rb.freezeRotation = true;
+
+            gPlanner = gFactory.CreatePlanner();
+        }
 
         // Start is called before the first frame update
         void Start()
