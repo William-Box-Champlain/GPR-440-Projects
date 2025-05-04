@@ -54,6 +54,19 @@ namespace GOAP
                 );
         }
 
+        public void AddLocationWithCondition(string key, float range, Vector3 location, Func<bool> condition)
+        {
+            beliefMap.Add
+                (
+                key,
+                new Belief.BeliefBuilder(key)
+                .WithCondition(() => InRange(location, range))
+                .WithCondition(condition)
+                .WithLocation(() => location)
+                .Build()
+                );
+        }
+
         bool InRange(UnityEngine.Vector3 position, float range) => UnityEngine.Vector3.Distance(agent.transform.position, position) < range;
     }
     public class Belief

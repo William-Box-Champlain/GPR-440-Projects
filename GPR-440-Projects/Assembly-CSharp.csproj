@@ -58,6 +58,7 @@
     <Analyzer Include="D:\Program Files\Unity\2022.3.8f1\Editor\Data\Tools\Unity.SourceGenerators\Unity.Properties.SourceGenerator.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets\Projects\GOAP\Scripts\GoapAgentDebugUIExtension.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\VectorFieldStorage.cs" />
     <Compile Include="Assets\Projects\ServiceLocator\ServiceLocatorGlobal.cs" />
     <Compile Include="Assets\Projects\GOAP\Scripts\GoapFactory.cs" />
@@ -82,6 +83,7 @@
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Final\BoundaryCalculator.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\ResolutionBiasControllerEditor.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\First Pass\FlowFieldManager.cs" />
+    <Compile Include="Assets\Projects\GOAP\Scripts\GoapAgentDebugUIExample.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\sixth\AgentManager.cs" />
     <Compile Include="Assets\Projects\ServiceLocator\ServiceLocatorScene.cs" />
     <Compile Include="Assets\Projects\Scenario_Generation\bezier-classes.cs" />
@@ -94,11 +96,13 @@
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Final\FlowFieldPathfindingManager.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\First Pass\NavierStokes.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\VectorFlowFieldManager.cs" />
+    <Compile Include="Assets\Projects\GOAP\Scripts\GoapAgentDebugUI.cs" />
     <Compile Include="Assets\Projects\Scenario_Generation\Wave_Function_Collapse.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Third Pass\VectorFieldAgent.cs" />
     <Compile Include="Assets\Projects\GOAP\Scripts\Strategies.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\PathfinderStartup.cs" />
     <Compile Include="Assets\Projects\GOAP\Scripts\GoapPlanner.cs" />
+    <Compile Include="Assets\Projects\GOAP\Scripts\CameraFollow.cs" />
     <Compile Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\VFFCalculatorInterface.cs" />
     <Compile Include="Assets\Projects\ServiceLocator\ServiceLocator.cs" />
     <Compile Include="Assets\Projects\Utilities\Vector3Extensions.cs" />
@@ -116,11 +120,14 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\Density Compute\Visualization.hlsl" />
+    <None Include="Assets\PolygonPrototype\Shaders\Prototype_Glass_Global.shader" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\JunctionDetector.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\sixth\VFFPathfinder.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Third Pass\FluidSimulation.compute" />
+    <None Include="Assets\PolygonPrototype\Shaders\Prototype_Object.shader" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\BiasGenerator.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\BoundsCalculator.compute" />
+    <None Include="Assets\PolygonPrototype\Shaders\Prototype_Global.shader" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\FlowField.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\Density Compute\Helpers.hlsl" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\ConservativeDownsample.shader" />
@@ -137,6 +144,7 @@
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\Density Compute\Density.hlsl" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\NavierStokesSolver.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\BoundsCalculator_Optimized.compute" />
+    <None Include="Assets\PolygonPrototype\Shaders\Prototype_Glass_Object.shader" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fourth Pass\DensityAdvection.compute" />
     <None Include="Assets\Projects\Vector Flow Field\Scripts\Fifth\VectorFieldPropagation.compute" />
   </ItemGroup>

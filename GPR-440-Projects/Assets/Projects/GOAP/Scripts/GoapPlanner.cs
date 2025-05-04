@@ -38,6 +38,7 @@ namespace GOAP
                             actionStack.Push(currentNode.Action);
                         }
                     }
+                    
                     return new ActionPlan(goal, actionStack, currentNode.Cost);
                 }
             }
@@ -53,6 +54,7 @@ namespace GOAP
             // If A* failed or didn't produce enough leaves, try EasySearch as fallback
             if (!aStarResult || parent.Leaves.Count == 0)
             {
+                Debug.Log("A* failed, using easySearch");
                 return EasySearch(parent, actions);
             }
             
@@ -102,35 +104,26 @@ namespace GOAP
                     return true;
                 }
                 
-                // Try each action that could help satisfy our requirements
                 foreach (var action in availableActions)
                 {
-                    // Skip actions that don't provide any required effects
                     if (!action.Effects.Any(unsatisfiedBeliefs.Contains))
                     {
                         continue;
                     }
                     
-                    // Create a new set of required effects
                     var newRequiredEffects = new HashSet<Belief>(unsatisfiedBeliefs);
                     
-                    // Remove effects this action provides
                     newRequiredEffects.ExceptWith(action.Effects);
                     
-                    // Add this action's preconditions
                     newRequiredEffects.UnionWith(action.Preconditions);
                     
-                    // Create new available actions set without this action to avoid cycles
                     var newAvailableActions = new HashSet<Action>(availableActions);
                     newAvailableActions.Remove(action);
                     
-                    // Create a new node
                     var newNode = new Node(current, action, newRequiredEffects, current.Cost + action.Cost);
                     
-                    // Add the new node to the open set
                     openSet.Add(newNode);
                     
-                    // Also add it as a leaf to the current node
                     current.Leaves.Add(newNode);
                 }
             }

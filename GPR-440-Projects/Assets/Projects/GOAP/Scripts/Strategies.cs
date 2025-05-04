@@ -110,8 +110,46 @@ namespace GOAP
             timer.OnTimerStop += () => IsComplete = true;
         }
 
-        public void Start() => timer.Start();
+        public virtual void Start() => timer.Start();
         public void Update(float deltaTime) => timer.Update(deltaTime);
+    }
+
+    public class PerformActionStrategy : IActionStrategy
+    {
+        private Func<bool> actionFunction;
+        private bool actionComplete = false;
+        
+        public bool IsValid => true;
+        public bool IsComplete => actionComplete;
+        
+        public PerformActionStrategy(Func<bool> actionFunction)
+        {
+            this.actionFunction = actionFunction;
+        }
+        
+        public void Start()
+        {
+            // Reset completion state when starting
+            actionComplete = false;
+        }
+        
+        public void Update(float dt)
+        {
+            // Execute the action function and check if it returns true
+            if (!actionComplete && actionFunction != null)
+            {
+                actionComplete = actionFunction();
+                if (actionComplete)
+                {
+                    Debug.Log("PerformActionStrategy: Action completed successfully");
+                }
+            }
+        }
+        
+        public void Stop()
+        {
+            // Nothing to clean up
+        }
     }
     #endregion
 }
